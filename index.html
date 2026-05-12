@@ -286,8 +286,8 @@
             </svg>
         </div>
 
-        <!-- Corner Panel -->
-        <div class="corner-panel">
+        <!-- Corner Panel — hidden when no corner data, shown when active -->
+        <div class="corner-panel" id="cornerPanel" style="display:none;">
             <div class="cp-head">Corner data</div>
             <div class="cp-row"><span class="cp-lbl">Radius</span><span class="cp-val accent" id="cpRadius">—</span></div>
             <div class="cp-row"><span class="cp-lbl">Direction</span><span class="cp-val accent" id="cpDir">—</span></div>
@@ -300,10 +300,12 @@
             </div>
         </div>
 
+        <!-- Weather HUD — bottom right, replaces corner panel when no corner data -->
+        <div id="weatherHUD" style="display:none;position:absolute;bottom:80px;right:12px;background:rgba(10,12,15,0.92);border:1px solid var(--border);border-radius:12px;padding:10px 12px;min-width:150px;z-index:12;"></div>
 
 
-        <!-- Weather HUD -->
-        <div id="weatherHUD" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(10,12,15,0.9);border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-width:140px;text-align:center;z-index:12;"></div>
+
+
 
         <!-- Pollen & Sun banner — green, one-off startup + movement notifications -->
         <div id="pollenSunBanner" style="display:none;position:absolute;top:70px;left:12px;right:12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:10px;padding:10px 12px;z-index:13;"></div>
@@ -525,7 +527,7 @@
 </div>
 
 <!-- SCENIC SETTINGS MODAL -->
-<div class="overlay hidden" id="scenicOverlay">
+<div class="overlay hidden" id="scenicOverlay" style="z-index:200;">
     <div class="modal" style="max-width:420px;max-height:90vh;overflow-y:auto;">
         <button class="modal-close" onclick="closeScenicModal()"><i class="ti ti-x"></i></button>
         <h2>Scenic route settings</h2>
@@ -1278,6 +1280,8 @@ function applyResult(r, speedMph, leanDeg, curve) {
     });
     document.getElementById('posLabel').textContent = r.posDetail || 'Hold centre line';
 
+    const cornerPanelEl = document.getElementById('cornerPanel');
+    const weatherHUDEl  = document.getElementById('weatherHUD');
     if (curve) {
         document.getElementById('cpRadius').textContent = curve.r_eff + 'm';
         document.getElementById('cpDir').textContent    = curve.direction;
@@ -1288,11 +1292,13 @@ function applyResult(r, speedMph, leanDeg, curve) {
         recEl.textContent = r.recSpeedMph + ' mph';
         recEl.className   = 'cp-val ' + (speedMph > r.recSpeedMph ? 'crit' : 'ok');
         document.getElementById('cpDist').textContent = Math.round(curve.distanceMetres) + 'm';
+        // Show corner panel, hide weather HUD to avoid overlap
+        if (cornerPanelEl) cornerPanelEl.style.display = 'block';
+        if (weatherHUDEl)  weatherHUDEl.style.display  = 'none';
     } else {
-        ['cpRadius','cpDir','cpSev','cpRec','cpDist'].forEach(id => {
-            document.getElementById(id).textContent = '—';
-            document.getElementById(id).className   = 'cp-val accent';
-        });
+        // No corner — hide corner panel, show weather HUD
+        if (cornerPanelEl) cornerPanelEl.style.display = 'none';
+        if (weatherHUDEl && weatherData)  weatherHUDEl.style.display = 'block';
     }
 
     const leanLimits = THRESHOLDS.leanAngle[userSkill];
@@ -1665,17 +1671,43 @@ async function geocodeSuggestWaypoint(inputId, listId, idx) {
 function selectAltRoute(idx) {
     if (!allRoutes[idx]) return;
     activeRouteIdx = idx;
-    // Update card styles
+
+    // Update card highlight
     document.querySelectorAll('.alt-route-card').forEach((c, i) => {
         c.classList.toggle('active', i === idx);
     });
-    // Draw selected route
+
+    // Update map layers — selected route bold, others dim
+    ROUTE_SOURCE_IDS.forEach((srcId, i) => {
+        if (!map || !map.getSource(srcId)) return;
+        const routeForSrc = allRoutes[i];
+        if (!routeForSrc) return;
+        map.getSource(srcId).setData({
+            type: 'Feature',
+            properties: { active: i === idx },
+            geometry: routeForSrc.geometry
+        });
+        map.setPaintProperty(srcId + '-inactive', 'line-opacity', i === idx ? 0    : 0.25);
+        map.setPaintProperty(srcId + '-inactive', 'line-width',   i === idx ? 0    : 4);
+        map.setPaintProperty(srcId + '-active',   'line-opacity', i === idx ? 0.9  : 0);
+        map.setPaintProperty(srcId + '-active',   'line-width',   i === idx ? 6    : 0);
+    });
+
+    // Update traffic congestion overlay for selected route
     const route  = allRoutes[idx];
     const coords = route.geometry.coordinates;
-    map.getSource('route').setData({ type: 'Feature', geometry: route.geometry });
     const congestionSegments = buildCongestionSegments(route);
-    if (map.getSource('traffic')) map.getSource('traffic').setData(congestionSegments);
-    // Update banner
+    if (map && map.getSource('traffic')) map.getSource('traffic').setData(congestionSegments);
+
+    // Update route key highlight
+    ['rk-0','rk-1','rk-2'].forEach((id, i) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.querySelector('span').style.color  = i === idx ? 'var(--text)' : 'var(--muted)';
+        el.querySelector('div').style.height  = i === idx ? '6px' : '4px';
+    });
+
+    // Update banner stats
     const distMi  = (route.distance / 1609.34).toFixed(1);
     const mins    = Math.round(route.duration / 60);
     const timeStr = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
@@ -1683,6 +1715,9 @@ function selectAltRoute(idx) {
     document.getElementById('rbDist').textContent    = distMi + ' mi';
     document.getElementById('rbTime').textContent    = timeStr;
     document.getElementById('rbCorners').textContent = corners;
+
+    // Flash banner border colour to confirm selection
+    showMapRouteLabel(idx);
     closeRouteModal();
 }
 let avoidTolls     = false;
@@ -2662,6 +2697,13 @@ async function fetchAirQuality(lat, lng) {
     } catch(e) { console.warn('Air quality fetch failed:', e.message); }
 }
 
+function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+    return Promise.race([
+        fetch(url, options),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeoutMs))
+    ]);
+}
+
 /* ═══════════════════════════════════════════════
    ROAD LOOKAHEAD — autonomous corner detection
    Uses Mapbox Map Matching to snap to road, then
@@ -2921,6 +2963,7 @@ async function planRoute() {
         : `${start[0]},${start[1]};${end[0]},${end[1]}`;
 
     // THREE dedicated fetches — each route has a specific goal
+    // Wrapped with timeout to prevent hanging on network errors
     // Route 0 — Fastest: driving-traffic, no special constraints
     const fastestUrl = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coordStr}?geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance${excludeParam}&access_token=${token}`;
 
@@ -2936,7 +2979,7 @@ async function planRoute() {
 
     try {
     const [fastestRes, leastTrafficRes, scenicRes] = await Promise.all([
-        fetch(fastestUrl), fetch(leastTrafficUrl), fetch(scenicUrl)
+        fetchWithTimeout(fastestUrl), fetchWithTimeout(leastTrafficUrl), fetchWithTimeout(scenicUrl)
     ]);
     const [fastestData, leastTrafficData, scenicData] = await Promise.all([
         fastestRes.json(), leastTrafficRes.json(), scenicRes.json()
@@ -3095,7 +3138,7 @@ async function planRoute() {
         const timeStr  = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
         const corners  = estimateCorners(coords);
 
-        // Draw all routes on map — fastest active, others dim
+        // Draw all routes on map — fastest (idx 0) active, others dim
         ROUTE_SOURCE_IDS.forEach((srcId, i) => {
             const r = allRoutes[i];
             if (!r || !map.getSource(srcId)) return;
@@ -3104,9 +3147,10 @@ async function planRoute() {
                 properties: { active: i === 0 },
                 geometry: r.geometry
             });
-            map.setPaintProperty(srcId + '-inactive', 'line-opacity', i === 0 ? 0 : 0.25);
-            map.setPaintProperty(srcId + '-inactive', 'line-width',   i === 0 ? 0 : 4);
-            map.setPaintProperty(srcId + '-active',   'line-opacity', i === 0 ? 0.9 : 0);
+            map.setPaintProperty(srcId + '-inactive', 'line-opacity', i === 0 ? 0    : 0.25);
+            map.setPaintProperty(srcId + '-inactive', 'line-width',   i === 0 ? 0    : 4);
+            map.setPaintProperty(srcId + '-active',   'line-opacity', i === 0 ? 0.9  : 0);
+            map.setPaintProperty(srcId + '-active',   'line-width',   i === 0 ? 6    : 0);
         });
 
         // Draw congestion overlay for active route
