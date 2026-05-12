@@ -959,6 +959,12 @@ function reAddRouteLayers() {
     if (!map.getSource('route')) {
         map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
+    if (!map.getSource('lookahead')) {
+        map.addSource('lookahead', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+        map.addLayer({ id: lookaheadLayer, type: 'line', source: 'lookahead',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#22c55e', 'line-width': 4, 'line-opacity': 0.6, 'line-dasharray': [2, 2] } });
+    }
     // Redraw active routes if any exist
     if (allRoutes.length > 0) {
         ROUTE_SOURCE_IDS.forEach((srcId, i) => {
@@ -1428,9 +1434,21 @@ function onPosition(pos) {
     document.getElementById('demoSpeed').value = speedMph;
     liveTelemetry = true;
     setTelemSource(imuActive ? 'GPS + IMU' : 'Live GPS');
+    lookaheadActive = true;
 
     // Update stationary state — gates pollen/sun banners
     updateStationaryState(speedMph);
+
+    // Run road lookahead when GPS is active and not in nav mode
+    if (speedMph >= LOOKAHEAD_MIN_SPEED && !navActive) {
+        runLookahead(lat, lng, heading, speedMph);
+    } else if (speedMph < LOOKAHEAD_MIN_SPEED && lookaheadCurve) {
+        // Clear lookahead when stopped
+        lookaheadCurve = null;
+        if (map && map.getSource('lookahead')) {
+            map.getSource('lookahead').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+        }
+    }
     if (heading !== null) {
         compassDeg = heading;
         document.getElementById('compassNeedle').setAttribute('transform', `rotate(${heading},18,18)`);
@@ -2642,6 +2660,222 @@ async function fetchAirQuality(lat, lng) {
         }
 
     } catch(e) { console.warn('Air quality fetch failed:', e.message); }
+}
+
+/* ═══════════════════════════════════════════════
+   ROAD LOOKAHEAD — autonomous corner detection
+   Uses Mapbox Map Matching to snap to road, then
+   follows road geometry forward 500m detecting
+   corners vs junctions
+═══════════════════════════════════════════════ */
+
+let lookaheadActive       = false;   // true when lookahead is running
+let lookaheadTimer        = null;    // debounce handle
+let lookaheadCurve        = null;    // current detected curve { r_eff, direction, distanceMetres }
+let lookaheadHistory      = [];      // ring buffer of last 5 GPS positions for map matching
+let lastLookaheadPos      = null;    // last position we ran lookahead from
+let lookaheadLayer        = 'lookahead-line'; // map layer id
+const LOOKAHEAD_METRES    = 500;
+const LOOKAHEAD_MIN_SPEED = 5;       // mph — don't run below this
+const LOOKAHEAD_INTERVAL  = 3000;    // ms between lookahead updates
+const JUNCTION_BEARING_THRESHOLD = 25; // degrees — change above this at a single point = junction
+const CORNER_MIN_BEARING_TOTAL   = 15; // total bearing change over segment to call it a corner
+const CORNER_SMOOTH_WINDOW       = 3;  // points to smooth bearing over
+
+async function runLookahead(lat, lng, heading, speedMph) {
+    // Skip if too slow, or nav is active (route provides corner data)
+    if (speedMph < LOOKAHEAD_MIN_SPEED || navActive) return;
+    // Debounce — don't run more than once per LOOKAHEAD_INTERVAL
+    if (lookaheadTimer) return;
+    lookaheadTimer = setTimeout(() => { lookaheadTimer = null; }, LOOKAHEAD_INTERVAL);
+
+    const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+    if (!token || token === 'pk.YOUR_TOKEN_HERE') return;
+
+    try {
+        // ── STEP 1: Map Matching — snap to road ──
+        // Build a trace from last few GPS positions for better matching
+        lookaheadHistory.push([lng, lat]);
+        if (lookaheadHistory.length > 5) lookaheadHistory.shift();
+
+        const traceCoords = lookaheadHistory.map(c => c.join(',')).join(';');
+        const matchUrl = `https://api.mapbox.com/matching/v5/mapbox/driving/${traceCoords}?access_token=${token}&geometries=geojson&overview=full&radiuses=${Array(lookaheadHistory.length).fill(20).join(';')}`;
+        const matchRes  = await fetch(matchUrl);
+        const matchData = await matchRes.json();
+
+        if (!matchData.matchings || matchData.matchings.length === 0) return;
+
+        // ── STEP 2: Get road geometry ahead via tilequery ──
+        // Use the matched position as our snap point
+        const matched    = matchData.matchings[0];
+        const matchedPos = matched.geometry.coordinates[matched.geometry.coordinates.length - 1];
+        const [mLng, mLat] = matchedPos;
+
+        // Query road features at matched position
+        const tileUrl  = `https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/tilequery/${mLng},${mLat}.json?layers=road&radius=10&limit=5&access_token=${token}`;
+        const tileRes  = await fetch(tileUrl);
+        const tileData = await tileRes.json();
+
+        if (!tileData.features || tileData.features.length === 0) return;
+
+        // ── STEP 3: Get road geometry 500m ahead ──
+        // Use Mapbox Directions with a waypoint 500m ahead in current heading
+        const aheadPoint = destinationPoint(mLat, mLng, heading || compassDeg, LOOKAHEAD_METRES);
+        const dirUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${mLng},${mLat};${aheadPoint.lng},${aheadPoint.lat}?geometries=geojson&overview=full&steps=true&access_token=${token}`;
+        const dirRes  = await fetch(dirUrl);
+        const dirData = await dirRes.json();
+
+        if (!dirData.routes || dirData.routes.length === 0) return;
+
+        const routeCoords = dirData.routes[0].geometry.coordinates;
+
+        // ── STEP 4: Analyse geometry for corners vs junctions ──
+        const curve = analyseRoadGeometry(routeCoords, heading || compassDeg);
+
+        // Update lookahead curve
+        lookaheadCurve = curve;
+
+        // Draw lookahead line on map
+        if (map) drawLookaheadLine(routeCoords, curve);
+
+        // Feed into cornering coach if no active route
+        if (!navActive && curve) {
+            const speedVal = parseInt(document.getElementById('demoSpeed').value);
+            const leanDeg  = imuActive ? Math.abs(currentLeanDeg) : Math.min(Math.round(speedVal * 0.38), 58);
+            const result   = corneringCoach({ speed_mph: speedVal }, { leanDeg }, curve, userSkill);
+            applyResult(result, speedVal, leanDeg, curve);
+        }
+
+    } catch(e) {
+        console.warn('Lookahead failed:', e.message);
+    }
+}
+
+function analyseRoadGeometry(coords, currentHeading) {
+    if (coords.length < 3) return null;
+
+    // Calculate cumulative distance and bearing changes along route
+    let cumulativeDist = 0;
+    const segments = [];
+
+    for (let i = 1; i < coords.length; i++) {
+        const prev = coords[i - 1];
+        const curr = coords[i];
+        const distM = haversineKm(prev, curr) * 1000;
+        const brg   = bearing(prev, curr);
+        cumulativeDist += distM;
+        segments.push({ dist: cumulativeDist, bearing: brg, coords: curr });
+        if (cumulativeDist >= LOOKAHEAD_METRES) break;
+    }
+
+    if (segments.length < 2) return null;
+
+    // Smooth bearings to reduce GPS noise
+    const smoothed = segments.map((s, i) => {
+        const window = segments.slice(
+            Math.max(0, i - CORNER_SMOOTH_WINDOW),
+            Math.min(segments.length, i + CORNER_SMOOTH_WINDOW + 1)
+        );
+        const avgBrg = window.reduce((sum, w) => sum + w.bearing, 0) / window.length;
+        return { ...s, smoothedBearing: avgBrg };
+    });
+
+    // Detect corners vs junctions
+    // A junction = single point with large bearing change (>25°)
+    // A corner = gradual bearing change over multiple points
+    let maxCornerBearing  = 0;
+    let cornerStartDist   = null;
+    let cornerDirection   = null;
+    let totalBearingChange = 0;
+    let junctionDetected  = false;
+
+    for (let i = 1; i < smoothed.length; i++) {
+        const prev = smoothed[i - 1];
+        const curr = smoothed[i];
+        let diff   = curr.smoothedBearing - prev.smoothedBearing;
+
+        // Normalise to -180 to +180
+        while (diff > 180)  diff -= 360;
+        while (diff < -180) diff += 360;
+
+        const absDiff = Math.abs(diff);
+
+        // Junction detection: sharp change at single point with small segment distance
+        const segDist = curr.dist - prev.dist;
+        if (absDiff > JUNCTION_BEARING_THRESHOLD && segDist < 15) {
+            // Mark as junction — skip this bearing change
+            junctionDetected = true;
+            continue;
+        }
+
+        totalBearingChange += diff;
+
+        if (absDiff > Math.abs(maxCornerBearing)) {
+            maxCornerBearing = diff;
+            if (cornerStartDist === null) cornerStartDist = prev.dist;
+            cornerDirection = diff > 0 ? 'RIGHT' : 'LEFT';
+        }
+    }
+
+    // Only report if total bearing change exceeds minimum corner threshold
+    if (Math.abs(totalBearingChange) < CORNER_MIN_BEARING_TOTAL) return null;
+
+    // Estimate radius from bearing change and arc length
+    // r = arc_length / angle_radians
+    const arcLength   = cornerStartDist || (LOOKAHEAD_METRES * 0.5);
+    const angleRad    = Math.abs(totalBearingChange) * Math.PI / 180;
+    const radiusM     = angleRad > 0 ? arcLength / angleRad : 999;
+
+    return {
+        r_eff:          Math.round(radiusM),
+        direction:      cornerDirection || 'RIGHT',
+        distanceMetres: cornerStartDist || 50,
+        source:         'lookahead',
+    };
+}
+
+function destinationPoint(lat, lng, bearingDeg, distanceM) {
+    // Calculate destination point given start, bearing, distance
+    const R    = 6371000; // Earth radius metres
+    const δ    = distanceM / R;
+    const θ    = bearingDeg * Math.PI / 180;
+    const φ1   = lat * Math.PI / 180;
+    const λ1   = lng * Math.PI / 180;
+    const φ2   = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
+    const λ2   = λ1 + Math.atan2(Math.sin(θ) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2));
+    return { lat: φ2 * 180 / Math.PI, lng: λ2 * 180 / Math.PI };
+}
+
+function drawLookaheadLine(coords, curve) {
+    if (!map) return;
+
+    const color = !curve         ? '#22c55e'  // green — straight
+        : curve.r_eff > 60       ? '#eab308'  // amber — gentle
+        : curve.r_eff > 20       ? '#f97316'  // orange — sharp
+        : '#ef4444';                            // red — hairpin
+
+    if (!map.getSource('lookahead')) {
+        map.addSource('lookahead', {
+            type: 'geojson',
+            data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }
+        });
+        map.addLayer({
+            id: lookaheadLayer, type: 'line', source: 'lookahead',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+                'line-color': color,
+                'line-width': 4,
+                'line-opacity': 0.6,
+                'line-dasharray': [2, 2]
+            }
+        });
+    } else {
+        map.getSource('lookahead').setData({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords }
+        });
+        map.setPaintProperty(lookaheadLayer, 'line-color', color);
+    }
 }
 
 async function planRoute() {
