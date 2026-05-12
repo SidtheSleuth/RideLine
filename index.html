@@ -12,7 +12,7 @@
         :root {
             --bg: #0a0c0f; --surface: #13161b; --card: #1a1e26;
             --border: rgba(255,255,255,0.08);
-            --accent: #ff6b1a; --accent-dim: rgba(255,107,26,0.15);
+            --accent: #3b82f6; --accent-dim: rgba(59,130,246,0.15);
             --success: #22c55e; --warn: #eab308; --danger: #ef4444;
             --teal: #2dd4bf;
             --text: #f0eeeb; --muted: #6b7280;
@@ -32,7 +32,7 @@
         .skill-badge i { font-size: 13px; }
         .skill-badge.novice { color: var(--success); border-color: rgba(34,197,94,0.3); }
         .skill-badge.intermediate { color: var(--warn); border-color: rgba(234,179,8,0.3); }
-        .skill-badge.expert { color: var(--accent); border-color: rgba(255,107,26,0.4); }
+        .skill-badge.expert { color: var(--accent); border-color: rgba(59,130,246,0.4); }
         .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; transition: all 0.15s; }
         .icon-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
         .icon-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
@@ -77,7 +77,7 @@
         .lean-fill.warn { background: var(--warn); } .lean-fill.crit { background: var(--danger); }
 
         /* ROUTE INFO BANNER */
-        .route-banner { position: absolute; bottom: 12px; left: 12px; right: 180px; background: rgba(10,12,15,0.92); border: 1px solid rgba(255,107,26,0.3); border-radius: 12px; padding: 10px 14px; display: none; align-items: center; gap: 12px; }
+        .route-banner { position: absolute; bottom: 12px; left: 12px; right: 180px; background: rgba(10,12,15,0.92); border: 1px solid rgba(59,130,246,0.3); border-radius: 12px; padding: 10px 14px; display: none; align-items: center; gap: 12px; }
         .route-banner.visible { display: flex; }
         .rb-stat { display: flex; flex-direction: column; }
         .rb-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -102,7 +102,7 @@
         .nav-tab.active { color: var(--accent); }
 
         /* DEMO STRIP */
-        .demo-strip { background: rgba(255,107,26,0.07); border-top: 1px solid rgba(255,107,26,0.18); padding: 7px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .demo-strip { background: rgba(59,130,246,0.07); border-top: 1px solid rgba(59,130,246,0.18); padding: 7px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
         .demo-strip label { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; white-space: nowrap; }
         .demo-strip input[type=range] { flex: 1; accent-color: var(--accent); }
         .demo-val { font-family: var(--font-d); font-size: 13px; font-weight: 700; color: var(--text); min-width: 38px; text-align: right; }
@@ -126,7 +126,7 @@
         .skill-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
         .skill-icon.novice { background: rgba(34,197,94,0.15); color: var(--success); }
         .skill-icon.intermediate { background: rgba(234,179,8,0.15); color: var(--warn); }
-        .skill-icon.expert { background: rgba(255,107,26,0.15); color: var(--accent); }
+        .skill-icon.expert { background: rgba(59,130,246,0.15); color: var(--accent); }
         .skill-info { flex: 1; }
         .skill-name { font-family: var(--font-d); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
         .skill-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
@@ -160,6 +160,28 @@
         .bright-hud { background:rgba(255,255,255,0.92) !important; border-color:rgba(0,0,0,0.12) !important; }
         .bright-hud .spd, .bright-hud .alert-title, .bright-hud .cp-val, .bright-hud .rb-val { color:#111 !important; }
         .bright-hud .unit, .bright-hud .limit-label, .bright-hud .alert-sub, .bright-hud .cp-lbl, .bright-hud .rb-label, .bright-hud .pos-label { color:#555 !important; }
+        /* TELEMETRY PANEL */
+        .telemetry-panel { background:var(--surface); border-top:1px solid var(--border); padding:8px 14px 4px; flex-shrink:0; display:flex; flex-direction:column; gap:5px; }
+        .telem-row { display:flex; align-items:center; gap:10px; }
+        .telem-label { display:flex; align-items:center; gap:5px; min-width:72px; font-family:var(--font-d); font-size:16px; font-weight:700; color:var(--text); }
+        .telem-label i { font-size:13px; color:var(--muted); }
+        .telem-unit { font-size:10px; color:var(--muted); font-family:var(--font-b); font-weight:400; }
+        .telem-bar-wrap { flex:1; display:flex; flex-direction:column; gap:3px; }
+        .telem-bar-track { height:10px; background:rgba(255,255,255,0.06); border-radius:5px; position:relative; overflow:visible; }
+        .telem-bar-fill { height:100%; border-radius:5px; background:var(--accent); transition:width 0.3s; pointer-events:none; }
+        .telem-bar-fill.corner-fill { background: linear-gradient(90deg, var(--success) 0%, var(--warn) 60%, var(--danger) 100%); }
+        .telem-bar-fill.dist-fill { background: linear-gradient(90deg, var(--danger) 0%, var(--warn) 40%, var(--success) 100%); }
+        .telem-bar-legend { display:flex; justify-content:space-between; align-items:center; padding:0 2px; }
+        /* Speed markers — recommended (soft line) and max (hard line) */
+        .speed-marker { position:absolute; top:-3px; width:2px; height:16px; background:var(--success); border-radius:1px; opacity:0.8; pointer-events:none; transition:left 0.4s; z-index:3; }
+        .speed-marker.mid { background:var(--accent); }
+        .speed-marker.hi  { background:#a78bfa; }
+        .max-marker { position:absolute; top:-3px; width:2px; height:16px; background:var(--success); border-radius:1px; opacity:0.5; pointer-events:none; transition:left 0.4s; z-index:3; border-top:2px solid var(--success); }
+        .max-marker.mid { background:var(--accent); border-top-color:var(--accent); }
+        .max-marker.hi  { background:#a78bfa; border-top-color:#a78bfa; }
+        /* Speed bar colour states */
+        .telem-bar-fill.warn-speed { background:var(--warn) !important; }
+        .telem-bar-fill.over-speed { background:var(--danger) !important; }
         .scenic-row { display:flex;align-items:center;justify-content:space-between;gap:12px; }
         .scenic-val { font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);min-width:36px;text-align:right; }
         .alt-route-card { display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface);transition:all 0.15s; }
@@ -168,7 +190,7 @@
         .alt-route-icon { width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0; }
         .alt-route-icon.fastest { background:rgba(34,197,94,0.15);color:var(--success); }
         .alt-route-icon.least-traffic { background:rgba(45,212,191,0.15);color:var(--teal); }
-        .alt-route-icon.scenic { background:rgba(255,107,26,0.15);color:var(--accent); }
+        .alt-route-icon.scenic { background:rgba(59,130,246,0.15);color:var(--accent); }
         .alt-route-info { flex:1; }
         .alt-route-name { font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em; }
         .alt-route-detail { font-size:11px;color:var(--muted);margin-top:2px; }
@@ -209,6 +231,9 @@
             </div>
             <button class="icon-btn" id="routeBtn" title="Plan route" onclick="openRouteModal()">
                 <i class="ti ti-route"></i>
+            </button>
+            <button class="icon-btn" id="imuBtn" title="Enable motion sensors" onclick="setupIMU()" style="border-color:rgba(45,212,191,0.3);color:#2dd4bf;">
+                <i class="ti ti-device-mobile-rotated"></i>
             </button>
             <button class="icon-btn" title="Map token" onclick="openKeyModal()">
                 <i class="ti ti-map-pin"></i>
@@ -273,6 +298,23 @@
                 <div class="lean-lbl"><span>Lean angle</span><span id="leanDeg">0°</span></div>
                 <div class="lean-track"><div class="lean-fill" id="leanFill" style="width:0%"></div></div>
             </div>
+        </div>
+
+
+
+        <!-- Weather HUD -->
+        <div id="weatherHUD" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(10,12,15,0.9);border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-width:140px;text-align:center;z-index:12;"></div>
+
+        <!-- Pollen & Sun banner — green, one-off startup + movement notifications -->
+        <div id="pollenSunBanner" style="display:none;position:absolute;top:70px;left:12px;right:12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:10px;padding:10px 12px;z-index:13;"></div>
+
+        <!-- Weather alert bar -->
+        <div id="weatherAlertBar" style="display:none;position:absolute;bottom:80px;left:12px;right:12px;border-radius:10px;padding:10px 12px;z-index:14;"></div>
+
+        <!-- Sensor warning bar -->
+        <div id="sensorWarnBar" style="display:none;position:absolute;top:70px;left:12px;right:12px;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.3);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--warn);align-items:center;gap:8px;z-index:15;">
+            <i class="ti ti-alert-triangle"></i>
+            <span id="sensorWarnMsg"></span>
         </div>
 
         <!-- Map style switcher -->
@@ -342,21 +384,100 @@
                 <span class="rb-label">Traffic</span>
                 <span class="rb-val ok" id="rbTraffic">—</span>
             </div>
+            <button id="btnStartNav" onclick="startNavigation()" style="background:var(--accent);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;white-space:nowrap;">
+                <i class="ti ti-navigation" aria-hidden="true"></i> Start
+            </button>
             <button class="rb-clear" onclick="clearRoute()" title="Clear route"><i class="ti ti-x"></i></button>
         </div>
     </div>
 
-    <!-- DEMO STRIP -->
-    <div class="demo-strip">
-        <label>Speed</label>
-        <input type="range" id="demoSpeed" min="0" max="120" step="1" value="0" oninput="runDemo()">
-        <span class="demo-val" id="demoSpeedV">0 mph</span>
-        <label>Corner</label>
-        <input type="range" id="demoCorner" min="0" max="3" step="1" value="0" oninput="runDemo()">
-        <span class="demo-val" id="demoCornerV">—</span>
-        <label>Dist</label>
-        <input type="range" id="demoDist" min="20" max="400" step="10" value="400" oninput="runDemo()">
-        <span class="demo-val" id="demoDistV">400m</span>
+    <!-- End Navigation bar — shown above demo strip during active nav -->
+    <div id="endNavBar" style="display:none;background:rgba(10,12,15,0.97);border-top:1px solid rgba(239,68,68,0.3);padding:8px 16px;flex-shrink:0;z-index:20;">
+        <button onclick="endNavigation()" style="width:100%;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:11px;color:#ef4444;font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;">
+            <i class="ti ti-navigation-off" aria-hidden="true"></i> End navigation
+        </button>
+    </div>
+
+    <!-- TELEMETRY PANEL -->
+    <div class="telemetry-panel" id="telemetryPanel">
+
+        <!-- Speed bar -->
+        <div class="telem-row">
+            <div class="telem-label">
+                <i class="ti ti-gauge"></i>
+                <span id="telemSpeedVal">0</span>
+                <span class="telem-unit">mph</span>
+            </div>
+            <div class="telem-bar-wrap">
+                <div class="telem-bar-track">
+                    <!-- Recommended speed marker (novice=green, intermediate=blue, expert=purple) -->
+                    <div class="speed-marker" id="markerRecNovice"     style="left:0%" title="Novice rec."></div>
+                    <div class="speed-marker mid" id="markerRecInter"  style="left:0%" title="Intermediate rec."></div>
+                    <div class="speed-marker hi"  id="markerRecExpert" style="left:0%" title="Expert rec."></div>
+                    <!-- Max speed markers -->
+                    <div class="max-marker" id="markerMaxNovice"       style="left:0%" title="Novice max"></div>
+                    <div class="max-marker mid" id="markerMaxInter"    style="left:0%" title="Intermediate max"></div>
+                    <div class="max-marker hi"  id="markerMaxExpert"   style="left:0%" title="Expert max"></div>
+                    <!-- Live speed fill -->
+                    <div class="telem-bar-fill" id="speedBarFill" style="width:0%"></div>
+                    <!-- Hidden input for backward compat -->
+                    <input type="range" id="demoSpeed" min="0" max="120" step="1" value="0"
+                        style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer;z-index:5;"
+                        oninput="onManualSpeedInput()">
+                </div>
+                <div class="telem-bar-legend">
+                    <span id="legendNovice"     style="color:var(--success);font-size:9px;">N</span>
+                    <span id="legendInter"      style="color:var(--accent);font-size:9px;">I</span>
+                    <span id="legendExpert"     style="color:#a78bfa;font-size:9px;">E</span>
+                    <span style="color:var(--muted);font-size:9px;margin-left:auto;">120</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Corner bar -->
+        <div class="telem-row">
+            <div class="telem-label">
+                <i class="ti ti-rotate-clockwise"></i>
+                <span id="telemCornerVal">—</span>
+            </div>
+            <div class="telem-bar-wrap">
+                <div class="telem-bar-track" style="cursor:pointer;">
+                    <div class="telem-bar-fill corner-fill" id="cornerBarFill" style="width:0%"></div>
+                    <input type="range" id="demoCorner" min="0" max="3" step="1" value="0"
+                        style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer;z-index:5;"
+                        oninput="runDemo()">
+                </div>
+                <div class="telem-bar-legend">
+                    <span style="color:var(--muted);font-size:9px;">None</span>
+                    <span style="color:var(--success);font-size:9px;">Gentle</span>
+                    <span style="color:var(--warn);font-size:9px;">Sharp</span>
+                    <span style="color:var(--danger);font-size:9px;">Hairpin</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Distance bar -->
+        <div class="telem-row">
+            <div class="telem-label">
+                <i class="ti ti-map-pin"></i>
+                <span id="telemDistVal">400m</span>
+            </div>
+            <div class="telem-bar-wrap">
+                <div class="telem-bar-track">
+                    <div class="telem-bar-fill dist-fill" id="distBarFill" style="width:100%"></div>
+                    <input type="range" id="demoDist" min="20" max="400" step="10" value="400"
+                        style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer;z-index:5;"
+                        oninput="runDemo()">
+                </div>
+                <div class="telem-bar-legend">
+                    <span style="color:var(--muted);font-size:9px;">20m</span>
+                    <span style="color:var(--muted);font-size:9px;">400m</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telemetry source indicator -->
+        <div id="telemSource" style="text-align:right;font-size:9px;color:var(--muted);padding:0 2px;letter-spacing:0.04em;text-transform:uppercase;">Manual</div>
     </div>
 
     <!-- BOTTOM NAV -->
@@ -366,6 +487,40 @@
         <button class="nav-tab"><i class="ti ti-gauge"></i><span>Speed</span></button>
         <button class="nav-tab"><i class="ti ti-rotate-clockwise"></i><span>Corners</span></button>
         <button class="nav-tab" onclick="openSkillModal()"><i class="ti ti-user"></i><span>Skill</span></button>
+    </div>
+</div>
+
+<!-- IMU ACCURACY DISCLAIMER MODAL -->
+<div class="overlay hidden" id="imuDisclaimerOverlay">
+    <div class="modal" style="max-width:400px;">
+        <h2 style="color:var(--warn);margin-bottom:12px;"><i class="ti ti-alert-triangle"></i> Sensor accuracy notice</h2>
+
+        <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:10px;padding:14px;margin-bottom:16px;">
+            <p style="font-size:13px;color:var(--text);line-height:1.6;margin:0;">
+                Motion sensor data from your phone provides an <strong>estimated</strong> lean angle and heading only. Accuracy varies significantly between devices and mounting positions.
+            </p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="width:28px;height:28px;border-radius:6px;background:rgba(239,68,68,0.12);color:var(--danger);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;"><i class="ti ti-road-sign"></i></div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.5;"><strong style="color:var(--text);">Always follow road signs.</strong> Speed limits, junction markings, and hazard signs take absolute priority over any app guidance.</div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="width:28px;height:28px;border-radius:6px;background:rgba(239,68,68,0.12);color:var(--danger);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;"><i class="ti ti-brain"></i></div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.5;"><strong style="color:var(--text);">Trust your rider sense.</strong> RideLine is a guidance aid. If something feels wrong on the road, act on your instincts — not the app.</div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="width:28px;height:28px;border-radius:6px;background:rgba(234,179,8,0.12);color:var(--warn);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;"><i class="ti ti-device-mobile"></i></div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.5;"><strong style="color:var(--text);">Phone mounting affects accuracy.</strong> Lean angle is estimated from handlebar tilt, not chassis lean. A dedicated IMU sensor gives far better results.</div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="width:28px;height:28px;border-radius:6px;background:rgba(59,130,246,0.12);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;"><i class="ti ti-shield-check"></i></div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.5;"><strong style="color:var(--text);">RideLine does not replace training.</strong> Always ride within your ability and the limits of the law, road conditions, and your machine.</div>
+            </div>
+        </div>
+
+        <button class="btn primary" style="width:100%;" onclick="dismissIMUDisclaimer()">I understand — continue</button>
     </div>
 </div>
 
@@ -478,7 +633,7 @@
         </div>
 
         <!-- Score preview -->
-        <div style="background:var(--accent-dim);border:1px solid rgba(255,107,26,0.2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);">
+        <div style="background:var(--accent-dim);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);">
             <i class="ti ti-info-circle" style="color:var(--accent);"></i>
             Changes apply to the next route you plan. The scenic route is always scored against all alternatives and the best-scoring one within your time budget is selected.
         </div>
@@ -588,7 +743,7 @@
 
         <div class="route-stats" id="routeStats">
             <div class="rs-row"><span class="rs-label">Distance</span><span class="rs-val" id="statDist">—</span></div>
-            <div class="rs-row" id="rowMapboxTime" style="border-left:3px solid #ff6b1a;padding-left:8px;margin-left:-8px;">
+            <div class="rs-row" id="rowMapboxTime" style="border-left:3px solid #3b82f6;padding-left:8px;margin-left:-8px;">
                 <span class="rs-label">Mapbox time</span><span class="rs-val" id="statTime">—</span>
             </div>
             <div class="rs-row" id="rowHereTime" style="display:none;border-left:3px solid #2dd4bf;padding-left:8px;margin-left:-8px;">
@@ -620,6 +775,7 @@
             <button onclick="clearToken()" title="Clear token" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;"><i class="ti ti-trash"></i></button>
         </div>
         <p style="margin-bottom:10px;">Paste a new token to update. Get yours at <a href="https://account.mapbox.com/access-tokens" target="_blank" style="color:var(--accent);">account.mapbox.com</a></p>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:10px;">Also ensure <strong style="color:var(--text);">Weather API</strong> is enabled in your Google Cloud Console for weather safety features.</p>
         <div class="key-input">
             <input type="text" id="mbKeyInput" placeholder="pk.eyJ1IjoiY…">
             <button class="btn primary" style="flex:0;padding:9px 16px;" onclick="initMap()">Apply</button>
@@ -766,7 +922,9 @@ function applyOTSCamera() {
     otsMode = true;
 }
 
-let otsMode = false;
+let otsMode      = false;
+let navActive    = false;
+let navRouteIdx  = 0;
 
 function reAddRouteLayers() {
     // Re-add all route sources and layers after a style change wipes them
@@ -826,9 +984,23 @@ const SAVED_KEY  = localStorage.getItem('mapbox_token');
    CORNERING COACH
 ═══════════════════════════════════════════════ */
 function corneringCoach(gps, imu, curve, skill) {
+    // ── WEATHER SAFETY GATE ──
+    if (corneringBlocked) {
+        return {
+            alertLevel: 'danger',
+            message: 'Guidance suspended',
+            instruction: 'POS_2',
+            detail: 'Dangerous conditions — follow road signs only',
+            recSpeedMph: null, v_limit_mph: null,
+            weatherBlocked: true,
+        };
+    }
+
     if (!curve || curve.r_eff <= 0) {
-        return { alertLevel: 'clear', message: 'All clear', instruction: 'POS_2',
-                 detail: 'Road ahead is straight', recSpeedMph: null, v_limit_mph: null };
+        const clearMsg = corneringWarned
+            ? { alertLevel: 'warning', message: 'Ride with caution', detail: 'Wet or cold conditions — reduce speed', recSpeedMph: null, v_limit_mph: null }
+            : { alertLevel: 'clear',   message: 'All clear',          detail: 'Road ahead is straight',               recSpeedMph: null, v_limit_mph: null };
+        return { ...clearMsg, instruction: 'POS_2' };
     }
     let severity;
     if (curve.r_eff >= THRESHOLDS.corners.gentle.minRadius)     severity = 'gentle';
@@ -891,17 +1063,181 @@ const demoCurves = [
 ];
 const cornerNames = ['None', 'Gentle right', 'Sharp left', 'Hairpin right'];
 
+/* ═══════════════════════════════════════════════
+   TELEMETRY PANEL
+═══════════════════════════════════════════════ */
+
+// Called when GPS feeds live speed — or manual slider input
+function onManualSpeedInput() {
+    liveSpeedOverride = true;
+    runDemo();
+}
+
+let liveSpeedOverride = false;
+let liveTelemetry     = false; // true when GPS is providing data
+let imuActive         = false; // true when DeviceOrientation is active
+let imuPermGranted    = false; // iOS permission granted
+let lastPos           = null;  // previous GPS position for speed fallback
+let lastPosTime       = null;  // timestamp for speed fallback calculation
+let currentLeanDeg    = 0;     // live lean angle from IMU
+let currentPitchDeg   = 0;     // forward/back pitch from IMU
+let imuBeta           = 0;     // raw device beta (front-back tilt)
+
+// ── WEATHER STATE ──
+let weatherData           = null;   // latest weather fetch result
+let weatherRefreshTimer   = null;   // refresh interval handle
+let subZeroHistory        = [];     // array of {time, tempC} for last 8 hours
+let corneringBlocked      = false;  // true = heavy rain or persistent freeze
+let corneringWarned       = false;  // true = caution condition active
+let lastWeatherFetchPos   = null;   // position of last weather fetch
+const WEATHER_FETCH_RADIUS_KM = 2;  // refetch if moved more than 2km
+const HEAVY_RAIN_TYPES = [
+    'HEAVY_RAIN', 'RAIN', 'RAIN_SHOWERS', 'THUNDERSTORM',
+    'HEAVY_SNOW', 'BLIZZARD', 'SLEET', 'FREEZING_RAIN',
+    'ICE_PELLETS', 'HEAVY_SHOWERS'
+];
+const CAUTION_RAIN_TYPES = [
+    'LIGHT_RAIN', 'DRIZZLE', 'LIGHT_SNOW', 'SNOW_SHOWERS',
+    'LIGHT_SHOWERS', 'MIST', 'FOG', 'FREEZING_DRIZZLE'
+];
+const FREEZE_THRESHOLD_C  = 2;
+
+// ── POLLEN & SUN STATE ──
+let pollenShownOnStart      = false;  // one-off startup banner shown
+let lastPollenFetchPos      = null;   // position of last pollen fetch
+let lastPollenIndex         = null;   // UPI value at last fetch (0-5)
+let lastUvIndex             = null;   // UV index at last weather fetch
+let pollenMovementCheckDist = 5;      // km moved before re-checking pollen
+
+// ── AIR QUALITY STATE ──
+let lastAqiFetchPos     = null;   // position of last AQI fetch
+let lastAqiIndex        = null;   // last Universal AQI value (0-100+)
+let lastAqiCategory     = '';     // last AQI category string
+let lastAqiDominant     = '';     // dominant pollutant
+let airQualityData      = null;   // full AQI response
+let aqiMovementCheckDist = 5;     // km moved before re-checking AQI
+let aqiDropNotifyThresh  = 20;    // AQI improvement needed to notify
+let aqiLastNotifyPos     = null;
+// AQI category thresholds (Universal AQI 0-100)
+const AQI_GOOD        = 50;
+const AQI_MODERATE    = 100;
+const AQI_POOR        = 150;
+let pollenDropThreshold     = 2;      // UPI drop needed to trigger movement notification
+// Conservative: only notify on significant drops, max once per 10km
+let pollenLastNotifyPos     = null;
+let lastPollenAllTypes      = [];    // stored for combined banner
+let lastPollenType          = '';    // dominant pollen type
+const POLLEN_NOTIFY_MIN_KM  = 10;
+
+// ── STATIONARY DETECTION ──
+let stationaryTimer     = null;   // timeout handle
+let stationaryStartTime = null;   // when rider stopped
+let isStationary        = false;  // true after 10s of no movement
+let pendingPollenBanner = null;   // queued banner fn to show when stationary
+const STATIONARY_SPEED_THRESHOLD_MPH = 2;   // below this = stationary
+const STATIONARY_REQUIRED_SECS       = 4;   // seconds before showing banner
+const FREEZE_HOURS        = 8;
+let imuGamma          = 0;     // raw device gamma (left-right tilt)
+let imuAlpha          = 0;     // raw device alpha (compass heading)
+
+function updateSpeedMarkers(curve) {
+    // Calculate rec and max speeds for all three skill levels for this corner
+    const skills = ['novice', 'intermediate', 'expert'];
+    const maxMph = 120;
+
+    skills.forEach((skill, i) => {
+        let recSpeed = null;
+        let maxSpeed = null;
+
+        if (curve && curve.r_eff > 0) {
+            const maxTheta  = { novice: 15, intermediate: 30, expert: 45 }[skill];
+            const v_limit_ms = Math.sqrt(9.81 * curve.r_eff * Math.tan(maxTheta * Math.PI / 180));
+            maxSpeed  = Math.round(v_limit_ms * 2.237);
+            recSpeed  = Math.round(maxSpeed * 0.8); // recommended = 80% of max (20% lower)
+        } else {
+            // No corner — use skill-based road speed limits
+            maxSpeed  = { novice: 60, intermediate: 80, expert: 100 }[skill];
+            recSpeed  = Math.round(maxSpeed * 0.8);
+        }
+
+        const recPct = Math.min((recSpeed / maxMph) * 100, 100);
+        const maxPct = Math.min((maxSpeed / maxMph) * 100, 100);
+
+        const recIds = ['markerRecNovice', 'markerRecInter', 'markerRecExpert'];
+        const maxIds = ['markerMaxNovice', 'markerMaxInter', 'markerMaxExpert'];
+
+        const recEl = document.getElementById(recIds[i]);
+        const maxEl = document.getElementById(maxIds[i]);
+        if (recEl) recEl.style.left = recPct + '%';
+        if (maxEl) maxEl.style.left = maxPct + '%';
+
+        // Show/hide based on current skill — show active skill brighter, others dimmer
+        const isActive = skill === userSkill;
+        if (recEl) recEl.style.opacity = isActive ? '1' : '0.3';
+        if (maxEl) maxEl.style.opacity = isActive ? '0.7' : '0.15';
+    });
+}
+
+function updateSpeedBar(speedMph, curve) {
+    const maxMph = 120;
+    const pct    = Math.min((speedMph / maxMph) * 100, 100);
+    const fill   = document.getElementById('speedBarFill');
+    if (!fill) return;
+    fill.style.width = pct + '%';
+
+    // Colour the bar based on speed vs active skill limit
+    let v_limit_mph = null;
+    if (curve && curve.r_eff > 0) {
+        const maxTheta   = { novice: 15, intermediate: 30, expert: 45 }[userSkill];
+        const v_limit_ms = Math.sqrt(9.81 * curve.r_eff * Math.tan(maxTheta * Math.PI / 180));
+        v_limit_mph      = v_limit_ms * 2.237;
+    }
+
+    fill.className = 'telem-bar-fill';
+    if (v_limit_mph !== null) {
+        if (speedMph > v_limit_mph)           fill.classList.add('over-speed');
+        else if (speedMph > v_limit_mph * 0.85) fill.classList.add('warn-speed');
+    }
+
+    // Update label
+    document.getElementById('telemSpeedVal').textContent = speedMph;
+}
+
+function updateCornerBar(cornerIdx) {
+    const fill = document.getElementById('cornerBarFill');
+    if (!fill) return;
+    fill.style.width = (cornerIdx / 3 * 100) + '%';
+    const names = ['—', 'Gentle', 'Sharp', 'Hairpin'];
+    document.getElementById('telemCornerVal').textContent = names[cornerIdx];
+}
+
+function updateDistBar(dist) {
+    const fill = document.getElementById('distBarFill');
+    if (!fill) return;
+    const pct = Math.min(((dist - 20) / (400 - 20)) * 100, 100);
+    fill.style.width = pct + '%';
+    document.getElementById('telemDistVal').textContent = dist + 'm';
+}
+
+function setTelemSource(src) {
+    const el = document.getElementById('telemSource');
+    if (el) el.textContent = src;
+}
+
 function runDemo() {
     const speedMph = parseInt(document.getElementById('demoSpeed').value);
     const ci       = parseInt(document.getElementById('demoCorner').value);
     const dist     = parseInt(document.getElementById('demoDist').value);
-    document.getElementById('demoSpeedV').textContent  = speedMph + ' mph';
-    document.getElementById('demoCornerV').textContent = cornerNames[ci];
-    document.getElementById('demoDistV').textContent   = dist + 'm';
     const curve   = demoCurves[ci] ? { ...demoCurves[ci], distanceMetres: dist } : null;
     const leanDeg = speedMph > 0 && curve ? Math.min(Math.round(speedMph * 0.38), 58) : 0;
     const result  = corneringCoach({ speed_mph: speedMph }, { leanDeg }, curve, userSkill);
     applyResult(result, speedMph, leanDeg, curve);
+
+    // Update telemetry panel
+    updateSpeedBar(speedMph, curve);
+    updateSpeedMarkers(curve);
+    updateCornerBar(ci);
+    updateDistBar(dist);
     compassDeg = (compassDeg + speedMph * 0.25) % 360;
     document.getElementById('compassNeedle').setAttribute('transform', `rotate(${compassDeg},18,18)`);
 }
@@ -919,6 +1255,16 @@ function applyResult(r, speedMph, leanDeg, curve) {
     titleEl.className = 'alert-title ' + r.alertLevel;
     titleEl.textContent = r.message;
     document.getElementById('alertSub').textContent = r.detail;
+
+    // If weather is blocking, hide speed limit and lean guidance
+    const hudLimit  = document.getElementById('hudLimit');
+    const hudPos    = document.getElementById('hudPos');
+    if (r.weatherBlocked) {
+        if (hudLimit) hudLimit.textContent = '— mph';
+        if (hudPos)   hudPos.style.opacity = '0.3';
+    } else {
+        if (hudPos)   hudPos.style.opacity = '1';
+    }
 
     ['pd1','pd2','pd3'].forEach((id, i) => {
         const active = (r.instruction === 'POS_1' && i===0) || (r.instruction === 'POS_2' && i===1) || (r.instruction === 'POS_3' && i===2);
@@ -1045,33 +1391,73 @@ function initMap(providedKey) {
 }
 
 function onPosition(pos) {
-    const { latitude: lat, longitude: lng, speed, heading } = pos.coords;
-    const speedMph = speed ? Math.round(speed * 2.237) : 0;
+    const { latitude: lat, longitude: lng, speed, heading, accuracy } = pos.coords;
+    const now = Date.now();
+
+    // GPS speed fallback — calculate from distance/time if API speed is null
+    let speedMph = 0;
+    if (speed !== null && speed >= 0) {
+        speedMph = Math.round(speed * 2.237);
+    } else if (lastPos && lastPosTime) {
+        // Calculate speed from consecutive positions
+        const distKm  = haversineKm([lastPos.lng, lastPos.lat], [lng, lat]);
+        const timeSec = (now - lastPosTime) / 1000;
+        if (timeSec > 0 && timeSec < 10) { // only if reasonable time gap
+            const speedMs = (distKm * 1000) / timeSec;
+            speedMph = Math.round(speedMs * 2.237);
+        }
+    }
+    lastPos     = { lat, lng };
+    lastPosTime = now;
+
+    // Fetch weather if first position or moved >2km since last fetch
+    if (!lastWeatherFetchPos ||
+        haversineKm([lastWeatherFetchPos.lng, lastWeatherFetchPos.lat], [lng, lat]) > WEATHER_FETCH_RADIUS_KM) {
+        fetchWeather(lat, lng);
+    }
+
+    // Fetch pollen and air quality in parallel on first fix or every 5km
+    if (!lastPollenFetchPos ||
+        haversineKm([lastPollenFetchPos.lng, lastPollenFetchPos.lat], [lng, lat]) > pollenMovementCheckDist) {
+        Promise.all([fetchPollenAndSun(lat, lng), fetchAirQuality(lat, lng)]);
+    } else if (!lastAqiFetchPos ||
+        haversineKm([lastAqiFetchPos.lng, lastAqiFetchPos.lat], [lng, lat]) > aqiMovementCheckDist) {
+        fetchAirQuality(lat, lng);
+    }
+
     document.getElementById('demoSpeed').value = speedMph;
+    liveTelemetry = true;
+    setTelemSource(imuActive ? 'GPS + IMU' : 'Live GPS');
+
+    // Update stationary state — gates pollen/sun banners
+    updateStationaryState(speedMph);
     if (heading !== null) {
         compassDeg = heading;
         document.getElementById('compassNeedle').setAttribute('transform', `rotate(${heading},18,18)`);
     }
+    // Use live IMU lean if available, otherwise estimate from speed
+    const liveImuLean = imuActive ? Math.abs(currentLeanDeg) : null;
+
     if (!userMarker) {
         const el = Object.assign(document.createElement('div'), {
-            style: 'width:16px;height:16px;background:#ff6b1a;border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(255,107,26,0.7)'
+            style: 'width:16px;height:16px;background:#3b82f6;border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(59,130,246,0.7)'
         });
         userMarker = new mapboxgl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
         map.flyTo({ center: [lng, lat], zoom: otsMode ? 17 : 15 });
         startCoords = [lng, lat];
     } else {
         userMarker.setLngLat([lng, lat]);
-        if (otsMode) {
-            // OTS: follow rider with high pitch, camera locked to heading
+        if (otsMode || navActive) {
+            // OTS / active navigation: follow rider with high pitch locked to heading
             map.easeTo({
-                center: [lng, lat],
-                bearing: heading || compassDeg,
-                pitch: 65,
-                zoom: 17,
+                center:   [lng, lat],
+                bearing:  heading || compassDeg,
+                pitch:    65,
+                zoom:     17,
                 duration: 300,
             });
         } else {
-            map.easeTo({ center: [lng, lat], bearing: heading || 0 });
+            map.easeTo({ center: [lng, lat], bearing: heading || 0, pitch: 30 });
         }
         startCoords = [lng, lat];
     }
@@ -1514,100 +1900,87 @@ async function scoreScenicRoute(route) {
     return { score: finalScore, warnings, junctionCount, corners, trafficSummary };
 }
 
-async function scoreElevation(coords, warnings) {
-    // Sample every ~500m along route (max 20 samples to keep API calls fast)
-    const token   = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+async function getElevationSamples(coords) {
+    // Google Elevation API — batch up to 512 locations per request
+    // Sample up to 20 points along route for efficiency
     const step    = Math.max(1, Math.floor(coords.length / 20));
     const samples = coords.filter((_, i) => i % step === 0).slice(0, 20);
+    const key     = GOOGLE_API_KEY;
+
+    if (!key || key === 'your_google_key_here') return null;
+
+    // Build locations string for Google Elevation API
+    const locStr = samples.map(([lng, lat]) => `${lat},${lng}`).join('|');
+    const url    = `https://maps.googleapis.com/maps/api/elevation/json?locations=${locStr}&key=${key}`;
 
     try {
-        // Mapbox Terrain RGB tile — sample elevation at each point
-        const elevations = await Promise.all(samples.map(async ([lng, lat]) => {
-            const zoom = 14;
-            const x    = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
-            const y    = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
-            const url  = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${x}/${y}.pngraw?access_token=${token}`;
-            // We approximate elevation from tile coordinates rather than decoding PNG
-            // Use Mapbox elevation endpoint instead
-            return null;
-        }));
-
-        // Use Mapbox tilequery for elevation approximation
-        const elevUrl = `https://api.mapbox.com/v4/mapbox.mapbox-terrain-v2/tilequery/${samples[0][0]},${samples[0][1]}.json?layers=contour&limit=1&access_token=${token}`;
-        const res  = await fetch(elevUrl);
+        const res  = await fetch(url);
         const data = await res.json();
+        if (data.status !== 'OK' || !data.results) return null;
+        return data.results.map((r, i) => ({
+            lng:  samples[i][0],
+            lat:  samples[i][1],
+            elev: r.elevation, // precise metres above sea level
+        }));
+    } catch(e) { return null; }
+}
 
-        if (!data.features || data.features.length === 0) return 0.5;
+async function scoreElevation(coords, warnings) {
+    // Quick elevation score using Google Elevation API
+    const elevResults = await getElevationSamples(coords);
+    if (!elevResults || elevResults.length < 2) return 0.5;
 
-        // Estimate gradient between sampled points using elevation data
-        // For now use a simplified scoring based on route distance vs displacement
-        const routeKm     = samples.length > 1
-            ? haversineKm(samples[0], samples[samples.length - 1])
-            : 0;
-        const totalDistKm = samples.length * 0.5;
-
-        // Score elevation variety (rolling hills good, flat or very steep bad)
-        return 0.7; // base score, refined below with gradient analysis
-
-    } catch(e) {
-        return 0.5; // neutral if elevation data unavailable
+    let totalVariety = 0;
+    for (let i = 1; i < elevResults.length; i++) {
+        totalVariety += Math.abs(elevResults[i].elev - elevResults[i-1].elev);
     }
+    // Score: rolling hills good — normalise against 300m total elevation change for a good scenic route
+    return Math.min(totalVariety / 300, 1);
 }
 
 async function scoreElevationFull(coords, warnings) {
-    // Full gradient analysis using Mapbox tilequery on sampled points
-    const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
-    const step  = Math.max(1, Math.floor(coords.length / 15));
-    const samples = coords.filter((_, i) => i % step === 0).slice(0, 15);
+    // Full gradient analysis using Google Elevation API — precise altitude per sample point
+    const elevResults = await getElevationSamples(coords);
+    if (!elevResults || elevResults.length < 2) {
+        return { score: 0.5, steepMins: 0, hardLimitBreached: false };
+    }
 
-    try {
-        const elevResults = await Promise.all(samples.map(async ([lng, lat]) => {
-            const url  = `https://api.mapbox.com/v4/mapbox.mapbox-terrain-v2/tilequery/${lng},${lat}.json?layers=contour&limit=1&access_token=${token}`;
-            const res  = await fetch(url);
-            const data = await res.json();
-            const elev = data.features?.[0]?.properties?.ele || 0;
-            return { lng, lat, elev };
-        }));
+    let steepMins         = 0;
+    let totalVariety      = 0;
+    let hardLimitBreached = false;
 
-        // Calculate gradients between consecutive samples
-        let steepMins       = 0;
-        let totalVariety    = 0;
-        let hardLimitBreached = false;
+    for (let i = 1; i < elevResults.length; i++) {
+        const prev   = elevResults[i - 1];
+        const curr   = elevResults[i];
+        const distM  = haversineKm([prev.lng, prev.lat], [curr.lng, curr.lat]) * 1000;
+        if (distM < 10) continue; // skip near-duplicate points
 
-        for (let i = 1; i < elevResults.length; i++) {
-            const prev = elevResults[i - 1];
-            const curr = elevResults[i];
-            const distM = haversineKm([prev.lng, prev.lat], [curr.lng, curr.lat]) * 1000;
-            if (distM < 1) continue;
-            const elevDiff = Math.abs(curr.elev - prev.elev);
-            const gradient = (elevDiff / distM) * 100;
-            totalVariety  += elevDiff;
+        const elevDiff = Math.abs(curr.elev - prev.elev);
+        const gradient = (elevDiff / distM) * 100; // percentage gradient
+        totalVariety  += elevDiff;
 
-            if (gradient > scenicSettings.gradHardLimit) {
-                hardLimitBreached = true;
-            } else if (gradient > scenicSettings.gradSoftLimit) {
-                // Estimate time on this segment (assume ~30mph on steep section)
-                steepMins += (distM / 1000) / (30 * 1.609) * 60;
-            }
+        if (gradient > scenicSettings.gradHardLimit) {
+            hardLimitBreached = true;
+        } else if (gradient > scenicSettings.gradSoftLimit) {
+            // Estimate time spent on steep section at ~30mph
+            steepMins += (distM / 1000) / (30 * 1.609) * 60;
         }
+    }
 
-        // Warn if over tolerance
-        if (steepMins > scenicSettings.gradTolerance) {
-            warnings.push(`${Math.round(steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`);
-        }
-        if (hardLimitBreached) {
-            warnings.push(`Sections exceed ${scenicSettings.gradHardLimit}% hard limit`);
-        }
+    // Warn rider if over tolerance
+    if (steepMins > scenicSettings.gradTolerance) {
+        warnings.push(`${Math.round(steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`);
+    }
+    if (hardLimitBreached) {
+        warnings.push(`Sections exceed ${scenicSettings.gradHardLimit}% hard limit`);
+    }
 
-        // Score: rolling variety good (normalise against 500m total elevation change)
-        // Penalise if hard limit breached or excessive steep time
-        let elevScore = Math.min(totalVariety / 500, 1);
-        if (hardLimitBreached) elevScore *= 0.3;
-        else if (steepMins > scenicSettings.gradTolerance) elevScore *= 0.6;
+    // Score: rolling variety good — penalise excessive steepness
+    let elevScore = Math.min(totalVariety / 300, 1);
+    if (hardLimitBreached)                              elevScore *= 0.3;
+    else if (steepMins > scenicSettings.gradTolerance)  elevScore *= 0.6;
 
-        return { score: elevScore, steepMins, hardLimitBreached };
-
-    } catch(e) { return { score: 0.5, steepMins: 0, hardLimitBreached: false }; }
+    return { score: elevScore, steepMins, hardLimitBreached };
 }
 
 async function scoreGreenSpace(coords) {
@@ -1646,6 +2019,629 @@ function haversineKm([lng1, lat1], [lng2, lat2]) {
     const dLng = (lng2 - lng1) * Math.PI / 180;
     const a  = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+/* ═══════════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════════ */
+function startNavigation() {
+    if (!allRoutes.length) return;
+    navActive   = true;
+    navRouteIdx = activeRouteIdx;
+
+    // Hide route banner start button, show end nav bar
+    document.getElementById('btnStartNav').style.display   = 'none';
+    document.getElementById('endNavBar').style.display     = 'flex';
+
+    // Alert HUD stays at top — cornering advice remains visible during nav
+
+    // Switch to OTS ride view automatically
+    setMapStyle('ots');
+
+    // Hide style bar during navigation — less distraction
+    document.getElementById('mapStyleBar').style.display = 'none';
+
+    // Close any open modals
+    closeRouteModal();
+
+    console.log('Navigation started on route', navRouteIdx);
+}
+
+function endNavigation() {
+    navActive = false;
+    otsMode   = false;
+
+    // Show banner start button again, hide end nav bar
+    document.getElementById('btnStartNav').style.display = '';
+    document.getElementById('endNavBar').style.display   = 'none';
+
+
+
+    // Return to bird's eye dark view
+    setMapStyle('dark');
+
+    // Restore style bar
+    document.getElementById('mapStyleBar').style.display = '';
+
+    // Ease camera back to birds eye
+    if (map) {
+        map.easeTo({ pitch: 0, bearing: 0, zoom: 13, duration: 800 });
+    }
+
+    console.log('Navigation ended');
+}
+
+/* ═══════════════════════════════════════════════
+   IMU — DeviceOrientation & Motion sensors
+═══════════════════════════════════════════════ */
+
+function setupIMU() {
+    // iOS 13+ requires explicit permission request triggered by user gesture
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS — show permission prompt
+        DeviceOrientationEvent.requestPermission()
+            .then(state => {
+                if (state === 'granted') {
+                    imuPermGranted = true;
+                    attachIMUListeners();
+                    showIMUDisclaimer();
+                } else {
+                    showSensorWarning('Motion sensor permission denied. Lean angle will be estimated from speed.');
+                }
+            })
+            .catch(() => showSensorWarning('Motion sensors unavailable on this device.'));
+    } else if (typeof DeviceOrientationEvent !== 'undefined') {
+        // Android / desktop — no permission needed
+        attachIMUListeners();
+        imuPermGranted = true;
+        showIMUDisclaimer();
+    } else {
+        showSensorWarning('This device does not support motion sensors. Lean angle will be estimated from speed.');
+    }
+}
+
+function attachIMUListeners() {
+    window.addEventListener('deviceorientation', onDeviceOrientation, true);
+    imuActive = true;
+    setTelemSource(liveTelemetry ? 'GPS + IMU' : 'IMU only');
+}
+
+function onDeviceOrientation(e) {
+    // alpha = compass (0-360), beta = front-back tilt (-180 to 180), gamma = left-right tilt (-90 to 90)
+    imuAlpha = e.alpha || 0;
+    imuBeta  = e.beta  || 0;
+    imuGamma = e.gamma || 0;
+
+    // Lean angle: gamma is left-right tilt of the phone
+    // Phone mounted vertically on bars: gamma ≈ lean angle (with sign)
+    // Clamp to ±60° which covers all realistic riding lean
+    currentLeanDeg  = Math.max(-60, Math.min(60, imuGamma));
+    currentPitchDeg = Math.max(-45, Math.min(45, imuBeta));
+
+    // Update compass from IMU alpha if GPS heading not available
+    if (!liveTelemetry && imuAlpha) {
+        compassDeg = imuAlpha;
+        const needle = document.getElementById('compassNeedle');
+        if (needle) needle.setAttribute('transform', `rotate(${compassDeg},18,18)`);
+    }
+
+    // Update lean bar live
+    const leanLimits = THRESHOLDS.leanAngle[userSkill];
+    const absLean    = Math.abs(currentLeanDeg);
+    const leanPct    = Math.min(absLean / leanLimits.critical * 100, 100);
+    const leanFill   = document.getElementById('leanFill');
+    const leanDegEl  = document.getElementById('leanDeg');
+    if (leanFill) {
+        leanFill.style.width  = leanPct + '%';
+        leanFill.className    = 'lean-fill' + (absLean >= leanLimits.critical ? ' crit' : absLean >= leanLimits.warn ? ' warn' : '');
+    }
+    if (leanDegEl) leanDegEl.textContent = Math.round(absLean) + '°';
+}
+
+function showIMUDisclaimer() {
+    // Show once per session
+    if (sessionStorage.getItem('imuDisclaimerShown')) return;
+    sessionStorage.setItem('imuDisclaimerShown', '1');
+    document.getElementById('imuDisclaimerOverlay').classList.remove('hidden');
+}
+
+function showSensorWarning(msg) {
+    const el = document.getElementById('sensorWarnMsg');
+    const wrap = document.getElementById('sensorWarnBar');
+    if (el && wrap) {
+        el.textContent = msg;
+        wrap.style.display = 'flex';
+        setTimeout(() => { wrap.style.display = 'none'; }, 6000);
+    }
+}
+
+function dismissIMUDisclaimer() {
+    document.getElementById('imuDisclaimerOverlay').classList.add('hidden');
+    // Mark IMU button as active
+    const btn = document.getElementById('imuBtn');
+    if (btn) {
+        btn.style.background = 'rgba(45,212,191,0.15)';
+        btn.style.borderColor = '#2dd4bf';
+        btn.title = 'Motion sensors active';
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   GOOGLE WEATHER API
+═══════════════════════════════════════════════ */
+
+async function fetchWeather(lat, lng) {
+    const key = GOOGLE_API_KEY;
+    if (!key || key === 'your_google_key_here') return;
+
+    try {
+        // Fetch current conditions and 8-hour history in parallel
+        const [currentRes, historyRes] = await Promise.all([
+            fetch(`https://weather.googleapis.com/v1/currentConditions:lookup?key=${key}&location.latitude=${lat}&location.longitude=${lng}&unitsSystem=METRIC`),
+            fetch(`https://weather.googleapis.com/v1/history/hours:lookup?key=${key}&location.latitude=${lat}&location.longitude=${lng}&hours=8&unitsSystem=METRIC`)
+        ]);
+
+        const [currentData, historyData] = await Promise.all([
+            currentRes.json(), historyRes.json()
+        ]);
+
+        processWeatherData(currentData, historyData);
+        lastWeatherFetchPos = { lat, lng };
+
+        // Refresh every 10 minutes
+        clearInterval(weatherRefreshTimer);
+        weatherRefreshTimer = setInterval(() => {
+            if (lastWeatherFetchPos) fetchWeather(lastWeatherFetchPos.lat, lastWeatherFetchPos.lng);
+        }, 600000);
+
+    } catch(e) {
+        console.warn('Weather fetch failed:', e.message);
+    }
+}
+
+function processWeatherData(current, history) {
+    weatherData = current;
+
+    const condType    = current?.weatherCondition?.type || '';
+    const tempC       = current?.temperature?.degrees ?? null;
+    const feelsLikeC  = current?.feelsLikeTemperature?.degrees ?? null;
+    const windKph     = current?.wind?.speed?.value ?? 0;
+    lastUvIndex       = current?.uvIndex ?? null;
+    const windGustKph = current?.wind?.gust?.value ?? 0;
+    const precipMm    = current?.precipitation?.qpf?.quantity ?? 0;
+
+    // ── SUB-ZERO HISTORY CHECK ──
+    // Build rolling 8-hour temperature log from history
+    if (history?.historyHours) {
+        subZeroHistory = history.historyHours.map(h => ({
+            time: h.interval?.startTime,
+            tempC: h.temperature?.degrees ?? 99
+        }));
+    }
+    // Add current reading
+    if (tempC !== null) subZeroHistory.push({ time: new Date().toISOString(), tempC });
+    // Keep only last 8 hours
+    const cutoff = Date.now() - (FREEZE_HOURS * 3600 * 1000);
+    subZeroHistory = subZeroHistory.filter(h => new Date(h.time).getTime() > cutoff);
+    const persistentFreeze = subZeroHistory.length >= FREEZE_HOURS &&
+        subZeroHistory.every(h => h.tempC < FREEZE_THRESHOLD_C);
+
+    // ── CLASSIFY CONDITIONS ──
+    const isHeavyRain  = HEAVY_RAIN_TYPES.includes(condType);
+    const isCautionRain = CAUTION_RAIN_TYPES.includes(condType);
+    const isHighWind   = windGustKph > 60; // strong gust advisory
+    const isIcy        = condType.includes('ICE') || condType.includes('FREEZING') || condType === 'BLIZZARD';
+
+    // Block cornering if: heavy rain, icy conditions, or 8+ hours persistent sub-2°C
+    corneringBlocked = isHeavyRain || isIcy || persistentFreeze;
+    // Warn if: light rain, mist/fog, high wind, temp approaching zero
+    corneringWarned  = !corneringBlocked && (isCautionRain || isHighWind || (tempC !== null && tempC < 5));
+
+    // Update weather HUD
+    updateWeatherHUD(condType, tempC, feelsLikeC, windKph, windGustKph, precipMm, persistentFreeze);
+
+    // Show alert if blocked or warned
+    if (corneringBlocked) {
+        showWeatherBlock(condType, tempC, persistentFreeze, windGustKph);
+    } else if (corneringWarned) {
+        showWeatherCaution(condType, tempC, windGustKph);
+    } else {
+        clearWeatherAlert();
+    }
+}
+
+function updateWeatherHUD(condType, tempC, feelsLikeC, windKph, gustKph, precipMm, freeze) {
+    const hud = document.getElementById('weatherHUD');
+    if (!hud) return;
+
+    const icons = {
+        'CLEAR': 'ti-sun', 'PARTLY_CLOUDY': 'ti-cloud-sun', 'CLOUDY': 'ti-cloud',
+        'RAIN': 'ti-cloud-rain', 'HEAVY_RAIN': 'ti-cloud-storm', 'DRIZZLE': 'ti-droplet',
+        'LIGHT_RAIN': 'ti-cloud-drizzle', 'THUNDERSTORM': 'ti-storm',
+        'SNOW': 'ti-snowflake', 'LIGHT_SNOW': 'ti-snowflake', 'BLIZZARD': 'ti-snowflake',
+        'FOG': 'ti-fog', 'MIST': 'ti-mist', 'SLEET': 'ti-snowflake',
+        'FREEZING_RAIN': 'ti-snowflake', 'RAIN_SHOWERS': 'ti-cloud-rain',
+    };
+    const icon   = icons[condType] || 'ti-cloud';
+    const tempStr = tempC !== null ? Math.round(tempC) + '°C' : '—';
+    const feelStr = feelsLikeC !== null ? 'Feels ' + Math.round(feelsLikeC) + '°C' : '';
+    const windStr = windKph > 0 ? Math.round(windKph) + ' km/h' : '';
+    const gustStr = gustKph > 0 ? 'Gusts ' + Math.round(gustKph) : '';
+
+    let statusColor = 'var(--success)';
+    if (corneringBlocked) statusColor = 'var(--danger)';
+    else if (corneringWarned) statusColor = 'var(--warn)';
+
+    hud.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;">
+            <i class="ti ${icon}" style="font-size:16px;color:${statusColor};"></i>
+            <span style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${tempStr}</span>
+            <span style="font-size:10px;color:var(--muted);">${feelStr}</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">${windStr}${gustStr ? ' · ' + gustStr : ''}${freeze ? ' · <span style="color:var(--danger);">❄ Persistent freeze</span>' : ''}</div>`;
+    hud.style.display = 'block';
+}
+
+function showWeatherBlock(condType, tempC, freeze, gustKph) {
+    const weatherAlert = document.getElementById('weatherAlertBar');
+    if (!weatherAlert) return;
+
+    let reason = '';
+    if (freeze) reason = `Road surface may be frozen — temperatures have been below ${FREEZE_THRESHOLD_C}°C for over ${FREEZE_HOURS} hours`;
+    else if (condType.includes('FREEZING') || condType.includes('ICE')) reason = 'Icy or freezing conditions detected on road surface';
+    else reason = 'Heavy rain detected — road grip significantly reduced';
+
+    weatherAlert.style.background = 'rgba(239,68,68,0.12)';
+    weatherAlert.style.borderColor = 'rgba(239,68,68,0.4)';
+    weatherAlert.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+            <i class="ti ti-alert-octagon" style="color:var(--danger);font-size:18px;flex-shrink:0;margin-top:1px;"></i>
+            <div>
+                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--danger);">Cornering guidance suspended</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5;">${reason}. Speed and positioning data is hidden. Always follow road signs and ride to conditions.</div>
+            </div>
+        </div>`;
+    weatherAlert.style.display = 'block';
+}
+
+function showWeatherCaution(condType, tempC, gustKph) {
+    const weatherAlert = document.getElementById('weatherAlertBar');
+    if (!weatherAlert) return;
+
+    let reasons = [];
+    if (CAUTION_RAIN_TYPES.includes(condType)) reasons.push('wet roads reduce grip');
+    if (tempC !== null && tempC < 5) reasons.push(`temperature is ${Math.round(tempC)}°C — cold tyres reduce traction`);
+    if (gustKph > 60) reasons.push(`wind gusts of ${Math.round(gustKph)} km/h`);
+
+    weatherAlert.style.background = 'rgba(234,179,8,0.1)';
+    weatherAlert.style.borderColor = 'rgba(234,179,8,0.35)';
+    weatherAlert.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+            <i class="ti ti-alert-triangle" style="color:var(--warn);font-size:18px;flex-shrink:0;margin-top:1px;"></i>
+            <div>
+                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--warn);">Ride with caution</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5;">Cornering guidance shown — but ${reasons.join(', ')}. Always follow road signs and trust your rider sense over app guidance.</div>
+            </div>
+        </div>`;
+    weatherAlert.style.display = 'block';
+}
+
+function clearWeatherAlert() {
+    const el = document.getElementById('weatherAlertBar');
+    if (el) el.style.display = 'none';
+}
+
+/* ═══════════════════════════════════════════════
+   POLLEN & UV — Google Pollen API + Weather UV
+═══════════════════════════════════════════════ */
+
+function updateStationaryState(speedMph) {
+    if (speedMph <= STATIONARY_SPEED_THRESHOLD_MPH) {
+        // Rider is slow/stopped — start timer if not already running
+        if (!stationaryTimer && !isStationary) {
+            stationaryTimer = setTimeout(() => {
+                isStationary = true;
+                stationaryTimer = null;
+                // Show any queued pollen/sun banner now
+                if (pendingPollenBanner) {
+                    pendingPollenBanner();
+                    pendingPollenBanner = null;
+                }
+            }, STATIONARY_REQUIRED_SECS * 1000);
+        }
+    } else {
+        // Rider is moving — cancel timer, clear stationary state
+        if (stationaryTimer) {
+            clearTimeout(stationaryTimer);
+            stationaryTimer = null;
+        }
+        isStationary = false;
+        // Dismiss any visible pollen banner immediately when moving again
+        dismissPollenBanner();
+    }
+}
+
+function showPollenWhenStationary(bannerFn) {
+    if (isStationary) {
+        // Already stationary — show immediately
+        bannerFn();
+    } else {
+        // Queue it — will show once rider has been stopped for 10 seconds
+        pendingPollenBanner = bannerFn;
+    }
+}
+
+async function fetchPollenAndSun(lat, lng) {
+    const key = GOOGLE_API_KEY;
+    if (!key || key === 'your_google_key_here') return;
+
+    try {
+        // Fetch today's pollen forecast (days=1 = today only)
+        const res  = await fetch(`https://pollen.googleapis.com/v1/forecast:lookup?key=${key}&location.latitude=${lat}&location.longitude=${lng}&days=1&languageCode=en`);
+        const data = await res.json();
+
+        if (!data.dailyInfo || data.dailyInfo.length === 0) return;
+
+        const today    = data.dailyInfo[0];
+        const pollenTypes = today.pollenTypeInfo || [];
+
+        // Find highest UPI across grass, tree, weed
+        let maxUPI      = 0;
+        let maxType     = '';
+        let maxCategory = '';
+        let allTypes    = [];
+
+        pollenTypes.forEach(pt => {
+            const upi = pt.indexInfo?.value ?? 0;
+            if (upi > 0) {
+                allTypes.push({ name: pt.displayName, upi, category: pt.indexInfo?.category || '' });
+                if (upi > maxUPI) {
+                    maxUPI      = upi;
+                    maxType     = pt.displayName;
+                    maxCategory = pt.indexInfo?.category || '';
+                }
+            }
+        });
+
+        lastPollenFetchPos = { lat, lng };
+
+        // ── STARTUP BANNER (one-off) ──
+        if (!pollenShownOnStart) {
+            pollenShownOnStart = true;
+            lastPollenIndex    = maxUPI;
+            lastPollenAllTypes = allTypes;
+            lastPollenType     = maxType;
+            // Trigger combined banner — includes AQI if already fetched
+            showPollenWhenStationary(() => triggerCombinedBanner());
+            return;
+        }
+
+        // ── MOVEMENT CHECK (conservative) ──
+        // Only notify if: moved enough, UPI dropped significantly, not notified recently,
+        // AND rider is stationary for 10 seconds
+        if (lastPollenIndex !== null && maxUPI < lastPollenIndex - pollenDropThreshold) {
+            const distSinceNotify = pollenLastNotifyPos
+                ? haversineKm([pollenLastNotifyPos.lng, pollenLastNotifyPos.lat], [lng, lat])
+                : Infinity;
+            if (distSinceNotify >= POLLEN_NOTIFY_MIN_KM) {
+                pollenLastNotifyPos = { lat, lng };
+                showPollenWhenStationary(() =>
+                    showPollenImprovement(lastPollenIndex, maxUPI, maxType)
+                );
+            }
+        }
+        lastPollenIndex = maxUPI;
+
+    } catch(e) { console.warn('Pollen fetch failed:', e.message); }
+}
+
+/* ─── COMBINED POLLEN + AIR QUALITY BANNER ─── */
+
+function getPollenColor(upi) {
+    return ['#6b7280','#22c55e','#eab308','#f97316','#ef4444','#991b1b'][Math.min(upi, 5)];
+}
+
+function getAqiColor(aqi) {
+    if (aqi <= AQI_GOOD)     return '#22c55e';
+    if (aqi <= AQI_MODERATE) return '#eab308';
+    if (aqi <= AQI_POOR)     return '#f97316';
+    return '#ef4444';
+}
+
+function buildBannerHTML(pollenData, aqiData, uvIdx) {
+    // pollenData: { upi, type, category, allTypes } or null
+    // aqiData:    { aqiVal, aqiCategory, dominant } or null
+
+    const hasPollen = pollenData && pollenData.upi > 0;
+    const hasAqi    = aqiData !== null;
+    const hasBoth   = hasPollen && hasAqi;
+
+    // UV text
+    let uvText = '', uvColor = '#22c55e';
+    if (uvIdx != null && uvIdx > 0) {
+        if (uvIdx >= 8)      { uvText = `UV ${uvIdx} Very high`; uvColor = '#ef4444'; }
+        else if (uvIdx >= 6) { uvText = `UV ${uvIdx} High`;      uvColor = '#f97316'; }
+        else if (uvIdx >= 3) { uvText = `UV ${uvIdx} Moderate`;  uvColor = '#eab308'; }
+        else                 { uvText = `UV ${uvIdx} Low`;        uvColor = '#22c55e'; }
+    }
+
+    // Icon sizes
+    const iconStyle = `font-size:22px;flex-shrink:0;`;
+
+    if (hasBoth) {
+        // Both pollen AND air quality — pollen left, AQI right, text in centre
+        const pColor = getPollenColor(pollenData.upi);
+        const aColor = getAqiColor(aqiData.aqiVal);
+        const typeStr = pollenData.allTypes.map(t => `${t.name} ${t.category}`).join(' · ');
+        return `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <i class="ti ti-leaf" style="color:${pColor};${iconStyle}" title="Pollen"></i>
+            <div style="flex:1;text-align:center;">
+                <div style="display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span style="font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:${pColor};">
+                        Pollen: ${pollenData.category}
+                    </span>
+                    <span style="color:var(--muted);font-size:11px;">·</span>
+                    <span style="font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:${aColor};">
+                        Air: ${aqiData.aqiCategory}
+                    </span>
+                    ${uvText ? `<span style="font-family:var(--font-d);font-size:11px;color:${uvColor};">· ${uvText}</span>` : ''}
+                </div>
+                <div style="font-size:10px;color:var(--muted);margin-top:3px;">${typeStr}${aqiData.dominant ? ` · ${aqiData.dominant.toUpperCase()} dominant` : ''}</div>
+            </div>
+            <i class="ti ti-tornado" style="color:#9ca3af;filter:drop-shadow(0 0 3px #9ca3af80);${iconStyle}" title="Air quality"></i>
+        </div>`;
+    } else if (hasPollen) {
+        // Pollen only — logo on both sides
+        const pColor = getPollenColor(pollenData.upi);
+        const typeStr = pollenData.allTypes.map(t => `${t.name} ${t.category}`).join(' · ');
+        return `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <i class="ti ti-leaf" style="color:${pColor};${iconStyle}"></i>
+            <div style="flex:1;text-align:center;">
+                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:${pColor};">
+                    Pollen: ${pollenData.category}${uvText ? ` · <span style="color:${uvColor};">${uvText}</span>` : ''}
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;">${typeStr}</div>
+            </div>
+            <i class="ti ti-leaf" style="color:${pColor};${iconStyle}"></i>
+        </div>`;
+    } else if (hasAqi) {
+        // Air quality only — logo on both sides
+        const aColor = getAqiColor(aqiData.aqiVal);
+        return `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <i class="ti ti-tornado" style="color:#9ca3af;filter:drop-shadow(0 0 3px #9ca3af80);${iconStyle}"></i>
+            <div style="flex:1;text-align:center;">
+                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:${aColor};">
+                    Air quality: ${aqiData.aqiCategory}
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+                    AQI ${aqiData.aqiVal}${aqiData.dominant ? ` · ${aqiData.dominant.toUpperCase()} dominant` : ''}${uvText ? ` · <span style="color:${uvColor};">${uvText}</span>` : ''}
+                </div>
+            </div>
+            <i class="ti ti-tornado" style="color:#9ca3af;filter:drop-shadow(0 0 3px #9ca3af80);${iconStyle}"></i>
+        </div>`;
+    } else if (uvText) {
+        // UV only
+        return `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <i class="ti ti-sun" style="color:${uvColor};${iconStyle}"></i>
+            <div style="flex:1;text-align:center;">
+                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:${uvColor};">${uvText}</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;">Sun protection may be advisable</div>
+            </div>
+            <i class="ti ti-sun" style="color:${uvColor};${iconStyle}"></i>
+        </div>`;
+    }
+    return null;
+}
+
+function triggerCombinedBanner() {
+    const banner = document.getElementById('pollenSunBanner');
+    if (!banner) return;
+
+    const uvIdx      = weatherData?.uvIndex ?? lastUvIndex;
+    const pollenData = (lastPollenIndex !== null && lastPollenIndex > 0)
+        ? { upi: lastPollenIndex, category: lastAqiCategory, allTypes: lastPollenAllTypes || [], type: lastPollenType || '' }
+        : null;
+    const aqiData    = airQualityData;
+
+    const html = buildBannerHTML(pollenData, aqiData, uvIdx);
+    if (!html) return;
+
+    banner.innerHTML = html + `
+        <button onclick="dismissPollenBanner()" style="position:absolute;top:6px;right:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;">
+            <i class="ti ti-x"></i>
+        </button>`;
+    banner.style.position = 'relative';
+    banner.style.display  = 'block';
+    setTimeout(() => dismissPollenBanner(), 5000);
+}
+
+function showPollenSunBanner(upi, type, category, allTypes) {
+    // Store pollen data for combined banner
+    lastPollenAllTypes = allTypes;
+    lastPollenType     = type;
+    showPollenWhenStationary(() => triggerCombinedBanner());
+}
+
+function showPollenImprovement(oldUPI, newUPI, type) {
+    const categories = ['None','Very Low','Low','Moderate','High','Very High'];
+    const oldCat = categories[Math.min(oldUPI, 5)];
+    const newCat = categories[Math.min(newUPI, 5)];
+    const banner = document.getElementById('pollenSunBanner');
+    if (!banner) return;
+    const pColor = getPollenColor(newUPI);
+    banner.style.position = 'relative';
+    banner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <i class="ti ti-leaf" style="color:${pColor};font-size:22px;flex-shrink:0;"></i>
+            <div style="flex:1;text-align:center;">
+                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:#22c55e;">Pollen improving</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;">${type} dropped from ${oldCat} to ${newCat}</div>
+            </div>
+            <i class="ti ti-leaf" style="color:${pColor};font-size:22px;flex-shrink:0;"></i>
+        </div>
+        <button onclick="dismissPollenBanner()" style="position:absolute;top:6px;right:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;"><i class="ti ti-x"></i></button>`;
+    banner.style.display = 'block';
+    setTimeout(() => dismissPollenBanner(), 5000);
+}
+
+function dismissPollenBanner() {
+    const el = document.getElementById('pollenSunBanner');
+    if (el) el.style.display = 'none';
+}
+
+async function fetchAirQuality(lat, lng) {
+    const key = GOOGLE_API_KEY;
+    if (!key || key === 'your_google_key_here') return;
+
+    try {
+        const res = await fetch(
+            `https://airquality.googleapis.com/v1/currentConditions:lookup?key=${key}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    location: { latitude: lat, longitude: lng },
+                    universalAqi: true,
+                    extraComputations: ['HEALTH_RECOMMENDATIONS', 'DOMINANT_POLLUTANT_CONCENTRATION'],
+                    languageCode: 'en'
+                })
+            }
+        );
+        const data = await res.json();
+        if (!data.indexes || data.indexes.length === 0) return;
+
+        const uaqi        = data.indexes.find(i => i.code === 'uaqi') || data.indexes[0];
+        const aqiVal      = uaqi.aqi ?? 0;
+        const aqiCategory = uaqi.category || '';
+        const dominant    = uaqi.dominantPollutant || '';
+
+        airQualityData  = { aqiVal, aqiCategory, dominant };
+        lastAqiFetchPos = { lat, lng };
+
+        // Store for movement comparison
+        const prevAqi = lastAqiIndex;
+        lastAqiIndex  = aqiVal;
+        lastAqiCategory = aqiCategory;
+        lastAqiDominant = dominant;
+
+        // Movement improvement check — conservative, min 10km between notifications
+        if (prevAqi !== null && prevAqi - aqiVal >= aqiDropNotifyThresh) {
+            const distSinceNotify = aqiLastNotifyPos
+                ? haversineKm([aqiLastNotifyPos.lng, aqiLastNotifyPos.lat], [lng, lat])
+                : Infinity;
+            if (distSinceNotify >= POLLEN_NOTIFY_MIN_KM) {
+                aqiLastNotifyPos = { lat, lng };
+                // Queue for stationary display
+                showPollenWhenStationary(() => triggerCombinedBanner());
+            }
+        }
+
+    } catch(e) { console.warn('Air quality fetch failed:', e.message); }
 }
 
 async function planRoute() {
@@ -1834,7 +2830,7 @@ async function planRoute() {
             const corners   = estimateCorners(def.route.geometry.coordinates);
             const extraMins = def.mins - fastestMins;
             const timeDiff  = extraMins > 0 ? ` · +${extraMins} min` : '';
-            const badgeColor = def.badge && def.badge.includes('⚠') ? 'rgba(234,179,8,0.15);color:var(--warn)' : 'rgba(255,107,26,0.12);color:var(--accent)';
+            const badgeColor = def.badge && def.badge.includes('⚠') ? 'rgba(234,179,8,0.15);color:var(--warn)' : 'rgba(59,130,246,0.12);color:var(--accent)';
             const badgeHtml = def.badge
                 ? `<span style="font-size:10px;background:${badgeColor};padding:1px 6px;border-radius:4px;margin-left:4px;">${def.badge}</span>`
                 : '';
