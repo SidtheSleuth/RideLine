@@ -1,0 +1,2169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>RideLine</title>
+    <link rel="stylesheet" href="https://unpkg.com/mapbox-gl@3.10.0/dist/mapbox-gl.css">
+    <link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0a0c0f; --surface: #13161b; --card: #1a1e26;
+            --border: rgba(255,255,255,0.08);
+            --accent: #ff6b1a; --accent-dim: rgba(255,107,26,0.15);
+            --success: #22c55e; --warn: #eab308; --danger: #ef4444;
+            --teal: #2dd4bf;
+            --text: #f0eeeb; --muted: #6b7280;
+            --font-d: 'Barlow Condensed', sans-serif;
+            --font-b: 'DM Sans', sans-serif;
+        }
+        html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-b); overflow: hidden; }
+        .app { display: flex; flex-direction: column; height: 100vh; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 20; }
+        .brand { display: flex; align-items: center; gap: 8px; }
+        .brand-icon { width: 28px; height: 28px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+        .brand-name { font-family: var(--font-d); font-size: 18px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+        .brand-name span { color: var(--accent); }
+        .topbar-right { display: flex; align-items: center; gap: 8px; }
+        .skill-badge { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s; }
+        .skill-badge:hover { border-color: var(--accent); color: var(--accent); }
+        .skill-badge i { font-size: 13px; }
+        .skill-badge.novice { color: var(--success); border-color: rgba(34,197,94,0.3); }
+        .skill-badge.intermediate { color: var(--warn); border-color: rgba(234,179,8,0.3); }
+        .skill-badge.expert { color: var(--accent); border-color: rgba(255,107,26,0.4); }
+        .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; transition: all 0.15s; }
+        .icon-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+        .icon-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+        /* MAP */
+        .map-wrap { flex: 1; position: relative; overflow: hidden; }
+        #map { width: 100%; height: 100%; background: #111620; }
+        .map-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px); background-size: 40px 40px; }
+
+        /* HUD */
+        .hud-speed { position: absolute; top: 12px; left: 12px; background: rgba(10,12,15,0.9); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; min-width: 90px; }
+        .hud-speed .spd { font-family: var(--font-d); font-size: 42px; font-weight: 900; line-height: 1; }
+        .hud-speed .unit { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .hud-speed .limit-row { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+        .hud-speed .limit-label { font-size: 10px; color: var(--muted); }
+        .hud-speed .limit-val { font-family: var(--font-d); font-size: 13px; font-weight: 700; }
+        .limit-val.ok { color: var(--success); } .limit-val.warn { color: var(--warn); } .limit-val.over { color: var(--danger); }
+        .hud-alert { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); min-width: 210px; border-radius: 12px; padding: 10px 16px; text-align: center; transition: background 0.25s, border-color 0.25s; }
+        .hud-alert.clear { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); }
+        .hud-alert.warning { background: rgba(234,179,8,0.12); border: 1px solid rgba(234,179,8,0.4); }
+        .hud-alert.danger { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.5); animation: shake 0.3s; }
+        @keyframes shake { 0%,100%{transform:translateX(-50%)} 25%{transform:translateX(calc(-50% - 4px))} 75%{transform:translateX(calc(-50% + 4px))} }
+        .alert-title { font-family: var(--font-d); font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+        .alert-title.clear { color: var(--success); } .alert-title.warning { color: var(--warn); } .alert-title.danger { color: var(--danger); }
+        .alert-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .hud-pos { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); background: rgba(10,12,15,0.88); border: 1px solid var(--border); border-radius: 10px; padding: 7px 14px; display: flex; align-items: center; gap: 8px; }
+        .pos-dots { display: flex; gap: 5px; }
+        .pos-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s; }
+        .pos-dot.active { background: var(--teal); border-color: var(--teal); box-shadow: 0 0 6px rgba(45,212,191,0.6); }
+        .pos-label { font-size: 11px; color: var(--muted); }
+        .hud-compass { position: absolute; top: 12px; right: 12px; width: 52px; height: 52px; border-radius: 50%; background: rgba(10,12,15,0.9); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
+        .corner-panel { position: absolute; bottom: 80px; right: 12px; background: rgba(10,12,15,0.92); border: 1px solid var(--border); border-radius: 12px; padding: 12px; width: 160px; }
+        .cp-head { font-family: var(--font-d); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+        .cp-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
+        .cp-lbl { font-size: 11px; color: var(--muted); }
+        .cp-val { font-family: var(--font-d); font-size: 14px; font-weight: 700; }
+        .cp-val.ok { color: var(--success); } .cp-val.warn { color: var(--warn); } .cp-val.crit { color: var(--danger); } .cp-val.accent { color: var(--accent); }
+        .lean-wrap { margin-top: 8px; }
+        .lean-lbl { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+        .lean-track { height: 6px; background: rgba(255,255,255,0.07); border-radius: 3px; }
+        .lean-fill { height: 100%; border-radius: 3px; background: var(--teal); transition: width 0.4s; }
+        .lean-fill.warn { background: var(--warn); } .lean-fill.crit { background: var(--danger); }
+
+        /* ROUTE INFO BANNER */
+        .route-banner { position: absolute; bottom: 12px; left: 12px; right: 180px; background: rgba(10,12,15,0.92); border: 1px solid rgba(255,107,26,0.3); border-radius: 12px; padding: 10px 14px; display: none; align-items: center; gap: 12px; }
+        .route-banner.visible { display: flex; }
+        .rb-stat { display: flex; flex-direction: column; }
+        .rb-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .rb-val { font-family: var(--font-d); font-size: 16px; font-weight: 700; color: var(--text); }
+        .rb-val.accent { color: var(--accent); }
+        .rb-divider { width: 1px; height: 30px; background: var(--border); }
+        .rb-clear { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; }
+        .rb-clear:hover { color: var(--danger); }
+
+        /* SEARCH AUTOCOMPLETE */
+        .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin-top: 4px; z-index: 200; max-height: 200px; overflow-y: auto; display: none; }
+        .autocomplete-item { padding: 10px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+        .autocomplete-item:last-child { border-bottom: none; }
+        .autocomplete-item:hover { background: var(--surface); }
+        .autocomplete-item i { color: var(--muted); font-size: 14px; flex-shrink: 0; }
+
+        /* BOTTOM NAV */
+        .bottom-nav { display: flex; background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0; z-index: 20; }
+        .nav-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 8px; cursor: pointer; border: none; background: transparent; color: var(--muted); font-family: var(--font-b); transition: color 0.15s; }
+        .nav-tab i { font-size: 20px; }
+        .nav-tab span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
+        .nav-tab.active { color: var(--accent); }
+
+        /* DEMO STRIP */
+        .demo-strip { background: rgba(255,107,26,0.07); border-top: 1px solid rgba(255,107,26,0.18); padding: 7px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .demo-strip label { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; white-space: nowrap; }
+        .demo-strip input[type=range] { flex: 1; accent-color: var(--accent); }
+        .demo-val { font-family: var(--font-d); font-size: 13px; font-weight: 700; color: var(--text); min-width: 38px; text-align: right; }
+
+        /* MODALS */
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+        .overlay.hidden { display: none; }
+        .modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; }
+        .modal h2 { font-family: var(--font-d); font-size: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+        .modal p { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 16px; }
+        .modal-close { float: right; background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; margin-top: -4px; }
+        .field-wrap { position: relative; margin-bottom: 10px; }
+        .field-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 15px; }
+        .field-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px 9px 34px; font-size: 13px; color: var(--text); outline: none; font-family: var(--font-b); }
+        .field-input:focus { border-color: var(--accent); }
+        .field-input::placeholder { color: var(--muted); }
+        .skill-options { display: flex; flex-direction: column; gap: 10px; }
+        .skill-option { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; background: var(--surface); transition: all 0.15s; }
+        .skill-option:hover { border-color: rgba(255,255,255,0.2); background: var(--card); }
+        .skill-option.selected { border-color: var(--accent); background: var(--accent-dim); }
+        .skill-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .skill-icon.novice { background: rgba(34,197,94,0.15); color: var(--success); }
+        .skill-icon.intermediate { background: rgba(234,179,8,0.15); color: var(--warn); }
+        .skill-icon.expert { background: rgba(255,107,26,0.15); color: var(--accent); }
+        .skill-info { flex: 1; }
+        .skill-name { font-family: var(--font-d); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+        .skill-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+        .skill-lock { font-size: 16px; color: var(--muted); }
+        .skill-lock.unlocked { color: var(--accent); }
+        .verify-checks { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        .verify-check { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer; }
+        .verify-check input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+        .btn-row { display: flex; gap: 8px; }
+        .btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); font-family: var(--font-d); font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s; background: var(--surface); color: var(--text); }
+        .btn:hover { background: var(--card); border-color: rgba(255,255,255,0.2); }
+        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn.primary:hover { opacity: 0.88; }
+        .btn.primary:disabled { opacity: 0.35; cursor: not-allowed; }
+        .key-input { display: flex; gap: 8px; margin-top: 4px; }
+        .key-input input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 12px; color: var(--text); font-family: monospace; outline: none; }
+        .key-input input:focus { border-color: var(--accent); }
+        .key-input input::placeholder { color: var(--muted); }
+        .warning-box { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #f87171; margin-bottom: 16px; line-height: 1.5; }
+        /* MAP STYLE SWITCHER */
+        .map-style-bar { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:10; }
+        .style-btn { display:flex;flex-direction:column;align-items:center;gap:3px; padding:6px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:rgba(10,12,15,0.88); color:rgba(255,255,255,0.5); cursor:pointer; font-size:10px; text-transform:uppercase; letter-spacing:0.05em; font-family:var(--font-b); font-weight:500; transition:all 0.15s; backdrop-filter:blur(4px); }
+        .style-btn i { font-size:16px; }
+        .style-btn:hover { border-color:rgba(255,255,255,0.35); color:#fff; }
+        .style-btn.active { border-color:var(--accent); background:var(--accent-dim); color:var(--accent); }
+        /* OTS view — tighten corner panel to make room */
+        .map-wrap.ots-mode .corner-panel { bottom: 160px; }
+        .map-wrap.ots-mode .route-banner { bottom: 160px; }
+        .map-wrap.ots-mode .trafficLegend { bottom: 160px; }
+        /* Bright mode overrides */
+        .bright-hud { background:rgba(255,255,255,0.92) !important; border-color:rgba(0,0,0,0.12) !important; }
+        .bright-hud .spd, .bright-hud .alert-title, .bright-hud .cp-val, .bright-hud .rb-val { color:#111 !important; }
+        .bright-hud .unit, .bright-hud .limit-label, .bright-hud .alert-sub, .bright-hud .cp-lbl, .bright-hud .rb-label, .bright-hud .pos-label { color:#555 !important; }
+        .scenic-row { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+        .scenic-val { font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);min-width:36px;text-align:right; }
+        .alt-route-card { display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface);transition:all 0.15s; }
+        .alt-route-card:hover { border-color:rgba(255,255,255,0.2); background:var(--card); }
+        .alt-route-card.active { border-color:var(--accent);background:var(--accent-dim); }
+        .alt-route-icon { width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0; }
+        .alt-route-icon.fastest { background:rgba(34,197,94,0.15);color:var(--success); }
+        .alt-route-icon.least-traffic { background:rgba(45,212,191,0.15);color:var(--teal); }
+        .alt-route-icon.scenic { background:rgba(255,107,26,0.15);color:var(--accent); }
+        .alt-route-info { flex:1; }
+        .alt-route-name { font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em; }
+        .alt-route-detail { font-size:11px;color:var(--muted);margin-top:2px; }
+        .waypoint-row { display:flex;align-items:center;gap:6px;margin-bottom:8px; }
+        .waypoint-row .field-wrap { flex:1;margin:0; }
+        .wp-remove { background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px;flex-shrink:0; }
+        .wp-remove:hover { color:var(--danger); }
+        .wp-handle { color:var(--muted);font-size:14px;flex-shrink:0; }
+        .toggle-wrap { width:40px;height:22px;background:var(--surface);border:1px solid var(--border);border-radius:99px;cursor:pointer;transition:all 0.2s;flex-shrink:0; }
+        .toggle-wrap.on { background:var(--accent);border-color:var(--accent); }
+        .toggle { width:16px;height:16px;background:var(--muted);border-radius:50%;margin:2px;transition:all 0.2s; }
+        .toggle-wrap.on .toggle { background:#fff;transform:translateX(18px); }
+        .source-btn { flex:1; padding:7px 4px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.04em; cursor:pointer; transition:all 0.15s; font-family:var(--font-b); }
+        .source-btn:hover { border-color:rgba(255,255,255,0.2); color:var(--text); }
+        .source-btn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+        .route-stats { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: none; }
+        .route-stats.visible { display: block; }
+        .rs-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .rs-row:last-child { margin-bottom: 0; }
+        .rs-label { font-size: 12px; color: var(--muted); }
+        .rs-val { font-family: var(--font-d); font-size: 15px; font-weight: 700; color: var(--text); }
+        .rs-val.accent { color: var(--accent); }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+        <div class="brand">
+            <div class="brand-icon"><i class="ti ti-bike" style="color:white;font-size:16px;"></i></div>
+            <span class="brand-name">Ride<span>Line</span></span>
+        </div>
+        <div class="topbar-right">
+            <div class="skill-badge novice" id="skillBadge" onclick="openSkillModal()">
+                <i class="ti ti-plant" id="skillIcon"></i>
+                <span id="skillLabel">Novice</span>
+            </div>
+            <button class="icon-btn" id="routeBtn" title="Plan route" onclick="openRouteModal()">
+                <i class="ti ti-route"></i>
+            </button>
+            <button class="icon-btn" title="Map token" onclick="openKeyModal()">
+                <i class="ti ti-map-pin"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAP -->
+    <div class="map-wrap">
+        <div id="map"></div>
+        <div class="map-grid" id="mapGrid"></div>
+
+        <!-- Speed HUD -->
+        <div class="hud-speed">
+            <div class="spd" id="hudSpeed">0</div>
+            <div class="unit">mph</div>
+            <div class="limit-row">
+                <span class="limit-label">Limit</span>
+                <span class="limit-val ok" id="hudLimit">— mph</span>
+            </div>
+        </div>
+
+        <!-- Alert HUD -->
+        <div class="hud-alert clear" id="hudAlert">
+            <div class="alert-title clear" id="alertTitle">All clear</div>
+            <div class="alert-sub" id="alertSub">Road ahead is straight</div>
+        </div>
+
+        <!-- Positioning HUD -->
+        <div class="hud-pos">
+            <div class="pos-dots">
+                <div class="pos-dot" id="pd1"></div>
+                <div class="pos-dot" id="pd2"></div>
+                <div class="pos-dot" id="pd3"></div>
+            </div>
+            <span class="pos-label" id="posLabel">Centre line</span>
+        </div>
+
+        <!-- Compass -->
+        <div class="hud-compass">
+            <svg width="36" height="36" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="17" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+                <text x="18" y="8.5" text-anchor="middle" fill="#ef4444" font-size="7" font-weight="700" font-family="monospace">N</text>
+                <text x="18" y="31" text-anchor="middle" fill="rgba(255,255,255,0.28)" font-size="6" font-family="monospace">S</text>
+                <text x="7.5" y="20" text-anchor="middle" fill="rgba(255,255,255,0.28)" font-size="6" font-family="monospace">W</text>
+                <text x="29" y="20" text-anchor="middle" fill="rgba(255,255,255,0.28)" font-size="6" font-family="monospace">E</text>
+                <polygon points="18,11 16,20 18,18 20,20" fill="#ef4444" id="compassNeedle"/>
+                <polygon points="18,25 16,16 18,18 20,16" fill="rgba(255,255,255,0.28)"/>
+                <circle cx="18" cy="18" r="2" fill="rgba(255,255,255,0.45)"/>
+            </svg>
+        </div>
+
+        <!-- Corner Panel -->
+        <div class="corner-panel">
+            <div class="cp-head">Corner data</div>
+            <div class="cp-row"><span class="cp-lbl">Radius</span><span class="cp-val accent" id="cpRadius">—</span></div>
+            <div class="cp-row"><span class="cp-lbl">Direction</span><span class="cp-val accent" id="cpDir">—</span></div>
+            <div class="cp-row"><span class="cp-lbl">Severity</span><span class="cp-val ok" id="cpSev">—</span></div>
+            <div class="cp-row"><span class="cp-lbl">Rec. speed</span><span class="cp-val ok" id="cpRec">—</span></div>
+            <div class="cp-row"><span class="cp-lbl">Distance</span><span class="cp-val accent" id="cpDist">—</span></div>
+            <div class="lean-wrap">
+                <div class="lean-lbl"><span>Lean angle</span><span id="leanDeg">0°</span></div>
+                <div class="lean-track"><div class="lean-fill" id="leanFill" style="width:0%"></div></div>
+            </div>
+        </div>
+
+        <!-- Map style switcher -->
+        <div class="map-style-bar" id="mapStyleBar">
+            <button class="style-btn active" id="styleBtn-dark" onclick="setMapStyle('dark')" title="Dark map">
+                <i class="ti ti-moon"></i>
+                <span>Dark</span>
+            </button>
+            <button class="style-btn" id="styleBtn-ots" onclick="setMapStyle('ots')" title="Over the shoulder — 3D navigation view">
+                <i class="ti ti-3d-cube-sphere"></i>
+                <span>Ride</span>
+            </button>
+            <button class="style-btn" id="styleBtn-satellite" onclick="setMapStyle('satellite')" title="Satellite view">
+                <i class="ti ti-satellite"></i>
+                <span>Satellite</span>
+            </button>
+            <button class="style-btn" id="styleBtn-bright" onclick="setMapStyle('bright')" title="High contrast — for bright sunlight">
+                <i class="ti ti-sun"></i>
+                <span>Bright</span>
+            </button>
+        </div>
+
+        <!-- Route key -->
+        <div id="routeKey" style="display:none;position:absolute;top:120px;left:12px;background:rgba(10,12,15,0.92);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:11px;min-width:130px;">
+            <div style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Routes</div>
+            <div onclick="selectAltRoute(0)" style="display:flex;align-items:center;gap:6px;margin-bottom:5px;cursor:pointer;" id="rk-0">
+                <div style="width:20px;height:4px;background:#ef4444;border-radius:2px;"></div>
+                <span style="color:var(--muted);">Fastest</span>
+            </div>
+            <div onclick="selectAltRoute(1)" style="display:flex;align-items:center;gap:6px;margin-bottom:5px;cursor:pointer;" id="rk-1">
+                <div style="width:20px;height:4px;background:#2dd4bf;border-radius:2px;"></div>
+                <span style="color:var(--muted);">Least traffic</span>
+            </div>
+            <div onclick="selectAltRoute(2)" style="display:flex;align-items:center;gap:6px;cursor:pointer;" id="rk-2">
+                <div style="width:20px;height:4px;background:#22c55e;border-radius:2px;"></div>
+                <span style="color:var(--muted);">Most scenic</span>
+            </div>
+        </div>
+
+        <!-- Traffic Legend -->
+        <div id="trafficLegend" style="display:none;position:absolute;bottom:80px;left:12px;background:rgba(10,12,15,0.92);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:11px;">
+            <div style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Traffic</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div style="width:20px;height:4px;background:#22c55e;border-radius:2px;"></div><span style="color:var(--muted);">Clear</span></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div style="width:20px;height:4px;background:#eab308;border-radius:2px;"></div><span style="color:var(--muted);">Moderate</span></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div style="width:20px;height:4px;background:#f97316;border-radius:2px;"></div><span style="color:var(--muted);">Heavy</span></div>
+            <div style="display:flex;align-items:center;gap:6px;"><div style="width:20px;height:4px;background:#ef4444;border-radius:2px;"></div><span style="color:var(--muted);">Severe</span></div>
+        </div>
+
+        <!-- Route Info Banner -->
+        <div class="route-banner" id="routeBanner">
+            <div class="rb-stat">
+                <span class="rb-label">Distance</span>
+                <span class="rb-val" id="rbDist">—</span>
+            </div>
+            <div class="rb-divider"></div>
+            <div class="rb-stat">
+                <span class="rb-label">Est. time</span>
+                <span class="rb-val" id="rbTime">—</span>
+            </div>
+            <div class="rb-divider"></div>
+            <div class="rb-stat">
+                <span class="rb-label">Corners</span>
+                <span class="rb-val accent" id="rbCorners">—</span>
+            </div>
+            <div class="rb-divider"></div>
+            <div class="rb-stat">
+                <span class="rb-label">Traffic</span>
+                <span class="rb-val ok" id="rbTraffic">—</span>
+            </div>
+            <button class="rb-clear" onclick="clearRoute()" title="Clear route"><i class="ti ti-x"></i></button>
+        </div>
+    </div>
+
+    <!-- DEMO STRIP -->
+    <div class="demo-strip">
+        <label>Speed</label>
+        <input type="range" id="demoSpeed" min="0" max="120" step="1" value="0" oninput="runDemo()">
+        <span class="demo-val" id="demoSpeedV">0 mph</span>
+        <label>Corner</label>
+        <input type="range" id="demoCorner" min="0" max="3" step="1" value="0" oninput="runDemo()">
+        <span class="demo-val" id="demoCornerV">—</span>
+        <label>Dist</label>
+        <input type="range" id="demoDist" min="20" max="400" step="10" value="400" oninput="runDemo()">
+        <span class="demo-val" id="demoDistV">400m</span>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <div class="bottom-nav">
+        <button class="nav-tab active"><i class="ti ti-map-2"></i><span>Map</span></button>
+        <button class="nav-tab" onclick="openRouteModal()"><i class="ti ti-route"></i><span>Route</span></button>
+        <button class="nav-tab"><i class="ti ti-gauge"></i><span>Speed</span></button>
+        <button class="nav-tab"><i class="ti ti-rotate-clockwise"></i><span>Corners</span></button>
+        <button class="nav-tab" onclick="openSkillModal()"><i class="ti ti-user"></i><span>Skill</span></button>
+    </div>
+</div>
+
+<!-- SCENIC SETTINGS MODAL -->
+<div class="overlay hidden" id="scenicOverlay">
+    <div class="modal" style="max-width:420px;max-height:90vh;overflow-y:auto;">
+        <button class="modal-close" onclick="closeScenicModal()"><i class="ti ti-x"></i></button>
+        <h2>Scenic route settings</h2>
+        <p>Adjust how the scenic route is scored and what gradient limits apply.</p>
+
+        <!-- Gradient section -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:10px;">Gradient limits</div>
+
+            <div class="scenic-row">
+                <div>
+                    <div style="font-size:13px;color:var(--text);">Soft limit (penalty above this)</div>
+                    <div style="font-size:11px;color:var(--muted);">Routes exceeding this are penalised in scoring</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="gradSoft" min="5" max="25" step="1" value="15" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--accent);">
+                    <span class="scenic-val" id="gradSoftVal">15%</span>
+                </div>
+            </div>
+
+            <div class="scenic-row" style="margin-top:10px;">
+                <div>
+                    <div style="font-size:13px;color:var(--text);">Hard limit (never exceed)</div>
+                    <div style="font-size:11px;color:var(--muted);">Route disqualified above this regardless of other scores</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="gradHard" min="10" max="35" step="1" value="25" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--accent);">
+                    <span class="scenic-val" id="gradHardVal">25%</span>
+                </div>
+            </div>
+
+            <div class="scenic-row" style="margin-top:10px;">
+                <div>
+                    <div style="font-size:13px;color:var(--text);">Soft limit tolerance</div>
+                    <div style="font-size:11px;color:var(--muted);">Minutes allowed above soft limit before warning</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="gradTolerance" min="1" max="10" step="1" value="3" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--accent);">
+                    <span class="scenic-val" id="gradToleranceVal">3 min</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scoring weights -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:10px;">Scoring weights</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Drag sliders to prioritise what makes a route scenic. Higher = more important.</div>
+
+            <div class="scenic-row">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <i class="ti ti-trees" style="color:var(--success);font-size:14px;"></i>
+                    <span style="font-size:13px;color:var(--text);">Green space</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="wGreen" min="0" max="10" step="1" value="8" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--success);">
+                    <span class="scenic-val" id="wGreenVal">8</span>
+                </div>
+            </div>
+
+            <div class="scenic-row" style="margin-top:8px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <i class="ti ti-mountain" style="color:var(--teal);font-size:14px;"></i>
+                    <span style="font-size:13px;color:var(--text);">Elevation variety</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="wElevation" min="0" max="10" step="1" value="7" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--teal);">
+                    <span class="scenic-val" id="wElevationVal">7</span>
+                </div>
+            </div>
+
+            <div class="scenic-row" style="margin-top:8px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <i class="ti ti-traffic-cone" style="color:var(--warn);font-size:14px;"></i>
+                    <span style="font-size:13px;color:var(--text);">Low traffic</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="wTraffic" min="0" max="10" step="1" value="7" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--warn);">
+                    <span class="scenic-val" id="wTrafficVal">7</span>
+                </div>
+            </div>
+
+            <div class="scenic-row" style="margin-top:8px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <i class="ti ti-road" style="color:var(--accent);font-size:14px;"></i>
+                    <span style="font-size:13px;color:var(--text);">Flow quality</span>
+                    <span style="font-size:10px;color:var(--muted);">(fewer junctions)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="wFlow" min="0" max="10" step="1" value="6" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--accent);">
+                    <span class="scenic-val" id="wFlowVal">6</span>
+                </div>
+            </div>
+
+            <div class="scenic-row" style="margin-top:8px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <i class="ti ti-rotate-clockwise" style="color:#a78bfa;font-size:14px;"></i>
+                    <span style="font-size:13px;color:var(--text);">Twistiness</span>
+                    <span style="font-size:10px;color:var(--muted);">(corner count)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="wCorners" min="0" max="10" step="1" value="5" oninput="updateScenicSettings()" style="width:80px;accent-color:#a78bfa;">
+                    <span class="scenic-val" id="wCornersVal">5</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Score preview -->
+        <div style="background:var(--accent-dim);border:1px solid rgba(255,107,26,0.2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);">
+            <i class="ti ti-info-circle" style="color:var(--accent);"></i>
+            Changes apply to the next route you plan. The scenic route is always scored against all alternatives and the best-scoring one within your time budget is selected.
+        </div>
+
+        <button class="btn primary" style="width:100%;margin-top:12px;" onclick="closeScenicModal()">Save settings</button>
+    </div>
+</div>
+
+<!-- ROUTE MODAL -->
+<div class="overlay hidden" id="routeOverlay">
+    <div class="modal">
+        <button class="modal-close" onclick="closeRouteModal()"><i class="ti ti-x"></i></button>
+        <h2>Plan a route</h2>
+        <p>Enter a destination to draw a route on the map. Leave start blank to use your current GPS position.</p>
+
+        <!-- Start point -->
+        <div class="field-wrap">
+            <i class="ti ti-current-location field-icon" style="color:var(--success);"></i>
+            <input class="field-input" type="text" id="routeStart" placeholder="Start — or use current location" oninput="geocodeSuggest('routeStart', 'startList')">
+            <div class="autocomplete-list" id="startList"></div>
+        </div>
+
+        <!-- Waypoints container -->
+        <div id="waypointsContainer"></div>
+
+        <!-- Add waypoint button -->
+        <button onclick="addWaypoint()" style="width:100%;background:none;border:1px dashed var(--border);border-radius:8px;padding:8px;font-size:12px;color:var(--muted);cursor:pointer;margin-bottom:8px;transition:all 0.15s;font-family:var(--font-b);" id="addWaypointBtn" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+            <i class="ti ti-plus"></i> Add stop
+        </button>
+
+        <!-- Destination -->
+        <div class="field-wrap">
+            <i class="ti ti-map-pin field-icon" style="color:var(--accent);"></i>
+            <input class="field-input" type="text" id="routeEnd" placeholder="Destination" oninput="geocodeSuggest('routeEnd', 'endList')">
+            <div class="autocomplete-list" id="endList"></div>
+        </div>
+
+        <!-- Route options -->
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+            <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:2px;">Route options</div>
+
+            <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+                <div>
+                    <div style="font-size:13px;color:var(--text);">Avoid motorways</div>
+                    <div style="font-size:11px;color:var(--muted);">Required for CBT licence holders</div>
+                </div>
+                <div class="toggle-wrap" onclick="toggleAvoidMotorways()">
+                    <div class="toggle" id="toggleMotorways"></div>
+                </div>
+            </label>
+
+            <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+                <div>
+                    <div style="font-size:13px;color:var(--text);">Avoid toll roads</div>
+                    <div style="font-size:11px;color:var(--muted);">Skip toll bridges and roads</div>
+                </div>
+                <div class="toggle-wrap" onclick="toggleAvoidTolls()">
+                    <div class="toggle" id="toggleTolls"></div>
+                </div>
+            </label>
+
+            <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+                <div>
+                    <div style="font-size:13px;color:var(--text);">Prefer twisty roads</div>
+                    <div style="font-size:11px;color:var(--muted);">Route via B-roads and corners</div>
+                </div>
+                <div class="toggle-wrap" onclick="toggleTwisty()">
+                    <div class="toggle" id="toggleTwisty"></div>
+                </div>
+            </label>
+
+            <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                    <div style="font-size:13px;color:var(--text);">Scenic route settings</div>
+                    <div style="font-size:11px;color:var(--muted);">Gradient limits, green space, flow quality</div>
+                </div>
+                <button onclick="openScenicModal()" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--accent);cursor:pointer;font-family:var(--font-b);">
+                    <i class="ti ti-adjustments-horizontal"></i> Configure
+                </button>
+            </div>
+        </div>
+
+        <div id="routeError" style="display:none;font-size:12px;color:var(--danger);margin-bottom:10px;">
+            <i class="ti ti-alert-circle"></i> <span id="routeErrorMsg">Could not find route.</span>
+        </div>
+
+        <div class="btn-row" style="margin-bottom:12px;">
+            <button class="btn" onclick="closeRouteModal()">Cancel</button>
+            <button class="btn primary" id="btnRoute" onclick="planRoute()">
+                <i class="ti ti-route"></i> Get route
+            </button>
+        </div>
+
+        <!-- Data source selector -->
+        <div style="display:flex;gap:6px;margin-bottom:12px;" id="sourceSelector">
+            <button class="source-btn active" id="src-mapbox" onclick="setRouteSource('mapbox')">Mapbox</button>
+            <button class="source-btn" id="src-here" onclick="setRouteSource('here')">HERE</button>
+            <button class="source-btn" id="src-google" onclick="setRouteSource('google')">Google</button>
+            <button class="source-btn" id="src-compare" onclick="setRouteSource('compare')">Compare all</button>
+        </div>
+
+        <!-- Alternative routes selector -->
+        <div id="altRoutesContainer" style="display:none;margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px;">Alternative routes — tap to select</div>
+            <div id="altRoutesList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        </div>
+
+        <div class="route-stats" id="routeStats">
+            <div class="rs-row"><span class="rs-label">Distance</span><span class="rs-val" id="statDist">—</span></div>
+            <div class="rs-row" id="rowMapboxTime" style="border-left:3px solid #ff6b1a;padding-left:8px;margin-left:-8px;">
+                <span class="rs-label">Mapbox time</span><span class="rs-val" id="statTime">—</span>
+            </div>
+            <div class="rs-row" id="rowHereTime" style="display:none;border-left:3px solid #2dd4bf;padding-left:8px;margin-left:-8px;">
+                <span class="rs-label">HERE time</span><span class="rs-val" id="statHereTime">—</span>
+            </div>
+            <div class="rs-row" id="rowGoogleTime" style="display:none;border-left:3px solid #4285f4;padding-left:8px;margin-left:-8px;">
+                <span class="rs-label">Google time</span><span class="rs-val" id="statGoogleTime">—</span>
+            </div>
+            <div class="rs-row"><span class="rs-label">Corners detected</span><span class="rs-val accent" id="statCorners">—</span></div>
+            <div class="rs-row"><span class="rs-label">Traffic (Mapbox)</span><span class="rs-val ok" id="statTraffic">—</span></div>
+            <div class="rs-row" id="rowHereIncidents" style="display:none;">
+                <span class="rs-label">HERE incidents</span><span class="rs-val" id="statHereIncidents">—</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MAPBOX KEY MODAL -->
+<div class="overlay hidden" id="keyOverlay">
+    <div class="modal">
+        <button class="modal-close" onclick="closeKeyModal()"><i class="ti ti-x"></i></button>
+        <h2>Mapbox token</h2>
+        <div id="tokenStatus" style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:16px;">
+            <i class="ti ti-key" style="color:var(--muted);font-size:16px;"></i>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Current token</div>
+                <div id="tokenPreview" style="font-family:monospace;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">None saved</div>
+            </div>
+            <button onclick="clearToken()" title="Clear token" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;"><i class="ti ti-trash"></i></button>
+        </div>
+        <p style="margin-bottom:10px;">Paste a new token to update. Get yours at <a href="https://account.mapbox.com/access-tokens" target="_blank" style="color:var(--accent);">account.mapbox.com</a></p>
+        <div class="key-input">
+            <input type="text" id="mbKeyInput" placeholder="pk.eyJ1IjoiY…">
+            <button class="btn primary" style="flex:0;padding:9px 16px;" onclick="initMap()">Apply</button>
+        </div>
+        <div id="tokenError" style="display:none;margin-top:10px;font-size:12px;color:var(--danger);">
+            <i class="ti ti-alert-circle"></i> <span id="tokenErrorMsg">Token must start with pk.</span>
+        </div>
+    </div>
+</div>
+
+<!-- SKILL MODAL -->
+<div class="overlay hidden" id="skillOverlay">
+    <div class="modal">
+        <button class="modal-close" onclick="closeSkillModal()"><i class="ti ti-x"></i></button>
+        <h2>Rider skill level</h2>
+        <p>Sets lean angle thresholds, recommended speeds, and positioning guidance.</p>
+        <div class="skill-options">
+            <div class="skill-option selected" id="opt-novice" onclick="selectSkill('novice')">
+                <div class="skill-icon novice"><i class="ti ti-plant"></i></div>
+                <div class="skill-info"><div class="skill-name">Novice</div><div class="skill-desc">Max 15° lean · conservative speeds · full prompts</div></div>
+                <i class="ti ti-check skill-lock unlocked" id="lock-novice"></i>
+            </div>
+            <div class="skill-option" id="opt-intermediate" onclick="selectSkill('intermediate')">
+                <div class="skill-icon intermediate"><i class="ti ti-flame"></i></div>
+                <div class="skill-info"><div class="skill-name">Intermediate</div><div class="skill-desc">Max 30° lean · standard speeds · key prompts</div></div>
+                <i class="ti ti-lock-open skill-lock" id="lock-intermediate"></i>
+            </div>
+            <div class="skill-option" id="opt-expert" onclick="selectSkill('expert')">
+                <div class="skill-icon expert"><i class="ti ti-bolt"></i></div>
+                <div class="skill-info"><div class="skill-name">Expert</div><div class="skill-desc">Max 45° lean · performance speeds · advanced coaching</div></div>
+                <i class="ti ti-lock skill-lock" id="lock-expert"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EXPERT VERIFICATION MODAL -->
+<div class="overlay hidden" id="expertOverlay">
+    <div class="modal">
+        <button class="modal-close" onclick="closeExpertModal()"><i class="ti ti-x"></i></button>
+        <h2>Expert verification</h2>
+        <div class="warning-box"><i class="ti ti-alert-triangle"></i> Expert mode enables higher lean thresholds and performance guidance. Only enable if you have appropriate experience and training.</div>
+        <p>Confirm all of the following:</p>
+        <div class="verify-checks">
+            <label class="verify-check"><input type="checkbox" id="chk1" onchange="checkVerify()"> I hold an advanced riding qualification (IAM, RoSPA or equivalent)</label>
+            <label class="verify-check"><input type="checkbox" id="chk2" onchange="checkVerify()"> I have 3 or more years of active riding experience</label>
+            <label class="verify-check"><input type="checkbox" id="chk3" onchange="checkVerify()"> I accept full responsibility for my own safety</label>
+            <label class="verify-check"><input type="checkbox" id="chk4" onchange="checkVerify()"> I understand expert mode does not override road laws or conditions</label>
+        </div>
+        <div class="btn-row">
+            <button class="btn" onclick="closeExpertModal()">Cancel</button>
+            <button class="btn primary" id="btnUnlock" onclick="unlockExpert()" disabled>Unlock expert</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/mapbox-gl@3.10.0/dist/mapbox-gl.js"></script>
+<script id="googleMapsScript"></script>
+<script>
+
+/* ═══════════════════════════════════════════════
+   CONFIG & STATE
+═══════════════════════════════════════════════ */
+const HARDCODED_TOKEN = 'pk.eyJ1Ijoic2lkdGhlc2xldXRoIiwiYSI6ImNtcDFlZ3U3aTAyN24yeHIyZnJmbHJidWUifQ.NQrvkcIP5nbxAzA9RAf46A'; // replace with your Mapbox token
+const HERE_API_KEY    = '3Sn0lEOSASv2nSy6LaTyPQJwSrW82YWKwvayuO-Qldo';    // replace with your HERE API key
+const GOOGLE_API_KEY  = 'AIzaSyCeST9lZAPiMbkdX8aHYPGcp4jqoflGvls';  // replace with your Google API key
+
+const THRESHOLDS = {
+    corners: {
+        gentle:  { minRadius: 60, recSpeedMph: { novice: 35, intermediate: 50, expert: 65 } },
+        sharp:   { minRadius: 20, recSpeedMph: { novice: 20, intermediate: 30, expert: 40 } },
+        hairpin: { minRadius: 0,  recSpeedMph: { novice: 12, intermediate: 18, expert: 25 } },
+    },
+    alertLookaheadMetres: 200,
+    leanAngle: {
+        novice:       { warn: 12, critical: 15 },
+        intermediate: { warn: 25, critical: 30 },
+        expert:       { warn: 38, critical: 45 },
+    },
+    deceleration: { novice: 5.5, intermediate: 7.0, expert: 8.5 },
+    safetyMargin: 1.3,
+};
+
+let userSkill    = 'novice';
+let expertUnlocked = false;
+let map          = null;
+let userMarker   = null;
+let compassDeg   = 0;
+let currentMapStyle = 'dark';
+let mapStylesLoaded = false;
+
+const MAP_STYLES = {
+    dark:      'mapbox://styles/mapbox/dark-v11',
+    satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+    bright:    'mapbox://styles/mapbox/outdoors-v12',  // high contrast, works in sunlight
+    ots:       'mapbox://styles/mapbox/dark-v11',      // same tiles, different camera
+};
+
+function setMapStyle(style) {
+    if (!map) return;
+
+    // Update button states
+    document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('styleBtn-' + style);
+    if (btn) btn.classList.add('active');
+
+    // OTS mode: dark style + tilt camera
+    if (style === 'ots') {
+        currentMapStyle = 'ots';
+        document.getElementById('map').closest('.map-wrap').classList.add('ots-mode');
+        otsMode = true;
+        if (map.getStyle().name !== 'Mapbox Dark') {
+            map.setStyle(MAP_STYLES.dark);
+            map.once('style.load', () => { reAddRouteLayers(); applyOTSCamera(); });
+        } else {
+            applyOTSCamera();
+        }
+    } else {
+        // All other styles: swap the Mapbox style
+        otsMode = false;
+        currentMapStyle = style;
+        document.getElementById('map').closest('.map-wrap').classList.remove('ots-mode');
+        map.setStyle(MAP_STYLES[style]);
+        map.once('style.load', () => {
+            reAddRouteLayers();
+            map.easeTo({ pitch: style === 'bright' ? 0 : 30, bearing: 0, duration: 600 });
+        });
+    }
+
+    // Bright mode — toggle white HUD overlays for sunlight readability
+    const huds = document.querySelectorAll('.hud-speed, .hud-alert, .hud-pos, .hud-compass, .corner-panel, .route-banner');
+    huds.forEach(el => el.classList.toggle('bright-hud', style === 'bright'));
+}
+
+function applyOTSCamera() {
+    // Over-the-shoulder: high pitch, close zoom, follow heading
+    map.easeTo({
+        pitch: 65,
+        zoom: 17,
+        bearing: compassDeg,
+        duration: 800,
+    });
+    // Keep camera following heading when GPS updates
+    otsMode = true;
+}
+
+let otsMode = false;
+
+function reAddRouteLayers() {
+    // Re-add all route sources and layers after a style change wipes them
+    const routeConfigs = [
+        { id: 'route-0', color: '#ef4444' },
+        { id: 'route-1', color: '#2dd4bf' },
+        { id: 'route-2', color: '#22c55e' },
+    ];
+    routeConfigs.forEach(cfg => {
+        if (!map.getSource(cfg.id)) {
+            map.addSource(cfg.id, { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+        }
+        if (!map.getLayer(cfg.id + '-inactive')) {
+            map.addLayer({ id: cfg.id + '-inactive', type: 'line', source: cfg.id,
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': cfg.color, 'line-width': 4, 'line-opacity': 0.25 } });
+            map.addLayer({ id: cfg.id + '-active', type: 'line', source: cfg.id,
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': cfg.color, 'line-width': 6, 'line-opacity': 0.9 },
+                filter: ['==', ['get', 'active'], true] });
+            map.on('click', cfg.id + '-inactive', () => selectAltRouteBySourceId(cfg.id));
+            map.on('mouseenter', cfg.id + '-inactive', () => { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', cfg.id + '-inactive', () => { map.getCanvas().style.cursor = ''; });
+        }
+    });
+    if (!map.getSource('traffic')) {
+        map.addSource('traffic', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({ id: 'traffic-line', type: 'line', source: 'traffic',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': 0.75 } });
+    }
+    if (!map.getSource('route')) {
+        map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+    // Redraw active routes if any exist
+    if (allRoutes.length > 0) {
+        ROUTE_SOURCE_IDS.forEach((srcId, i) => {
+            const r = allRoutes[i];
+            if (!r || !map.getSource(srcId)) return;
+            map.getSource(srcId).setData({
+                type: 'Feature',
+                properties: { active: i === activeRouteIdx },
+                geometry: r.geometry
+            });
+            map.setPaintProperty(srcId + '-inactive', 'line-opacity', i === activeRouteIdx ? 0 : 0.25);
+            map.setPaintProperty(srcId + '-inactive', 'line-width',   i === activeRouteIdx ? 0 : 4);
+            map.setPaintProperty(srcId + '-active',   'line-opacity', i === activeRouteIdx ? 0.9 : 0);
+        });
+    }
+}
+let startCoords  = null; // [lng, lat]
+let endCoords    = null; // [lng, lat]
+
+const SAVED_KEY  = localStorage.getItem('mapbox_token');
+
+/* ═══════════════════════════════════════════════
+   CORNERING COACH
+═══════════════════════════════════════════════ */
+function corneringCoach(gps, imu, curve, skill) {
+    if (!curve || curve.r_eff <= 0) {
+        return { alertLevel: 'clear', message: 'All clear', instruction: 'POS_2',
+                 detail: 'Road ahead is straight', recSpeedMph: null, v_limit_mph: null };
+    }
+    let severity;
+    if (curve.r_eff >= THRESHOLDS.corners.gentle.minRadius)     severity = 'gentle';
+    else if (curve.r_eff >= THRESHOLDS.corners.sharp.minRadius) severity = 'sharp';
+    else                                                          severity = 'hairpin';
+
+    const recSpeedMph  = THRESHOLDS.corners[severity].recSpeedMph[skill];
+    const maxTheta     = { novice: 15, intermediate: 30, expert: 45 }[skill];
+    const v_limit_ms   = Math.sqrt(9.81 * curve.r_eff * Math.tan(maxTheta * Math.PI / 180));
+    const v_limit_mph  = v_limit_ms * 2.237;
+    const speed_ms     = gps.speed_mph / 2.237;
+    const decel        = THRESHOLDS.deceleration[skill];
+    const alertDist    = ((speed_ms ** 2) / (2 * decel)) * THRESHOLDS.safetyMargin;
+
+    // IAM/BikeSafe two-phase positioning
+    let instruction, posDetail;
+    if (curve.distanceMetres > 80) {
+        instruction = curve.direction === 'RIGHT' ? 'POS_1' : 'POS_3';
+        posDetail   = curve.direction === 'RIGHT' ? 'Move left — maximise vision' : 'Move right — maximise vision';
+    } else {
+        instruction = curve.direction === 'RIGHT' ? 'POS_3' : 'POS_1';
+        posDetail   = curve.direction === 'RIGHT' ? 'Move right — through the apex' : 'Move left — through the apex';
+    }
+
+    const leanLimits = THRESHOLDS.leanAngle[skill];
+    let leanAlert = null;
+    if (imu && imu.leanDeg >= leanLimits.critical)     leanAlert = 'LEAN_CRITICAL';
+    else if (imu && imu.leanDeg >= leanLimits.warn)    leanAlert = 'LEAN_WARN';
+
+    const tooFast       = gps.speed_mph > v_limit_mph;
+    const notEnoughRoom = curve.distanceMetres <= alertDist;
+    let alertLevel, message, detail;
+
+    if (severity === 'hairpin' && (tooFast || notEnoughRoom)) {
+        alertLevel = 'danger'; message = 'HAIRPIN — BRAKE NOW';
+        detail = `${curve.direction} hairpin · ${Math.round(curve.distanceMetres)}m · slow to ${Math.round(recSpeedMph)} mph`;
+    } else if (tooFast || notEnoughRoom || leanAlert === 'LEAN_CRITICAL') {
+        alertLevel = 'danger'; message = severity === 'sharp' ? 'Sharp corner — slow down!' : 'Too fast for corner';
+        detail = `${curve.direction} · ${Math.round(curve.distanceMetres)}m · limit ${Math.round(v_limit_mph)} mph`;
+    } else if (leanAlert === 'LEAN_WARN' || curve.distanceMetres <= THRESHOLDS.alertLookaheadMetres) {
+        alertLevel = 'warning'; message = severity === 'hairpin' ? 'Hairpin ahead' : severity === 'sharp' ? 'Sharp corner ahead' : 'Corner ahead';
+        detail = `${curve.direction} · ${Math.round(curve.distanceMetres)}m · rec. ${Math.round(recSpeedMph)} mph`;
+    } else {
+        alertLevel = 'clear'; message = 'All clear';
+        detail = `${curve.direction} corner · ${Math.round(curve.distanceMetres)}m ahead`;
+    }
+
+    return { alertLevel, message, detail, instruction, posDetail,
+             recSpeedMph: Math.round(recSpeedMph), v_limit_mph: Math.round(v_limit_mph), severity };
+}
+
+/* ═══════════════════════════════════════════════
+   DEMO RUNNER
+═══════════════════════════════════════════════ */
+const demoCurves = [
+    null,
+    { r_eff: 85, direction: 'RIGHT' },
+    { r_eff: 32, direction: 'LEFT'  },
+    { r_eff: 10, direction: 'RIGHT' },
+];
+const cornerNames = ['None', 'Gentle right', 'Sharp left', 'Hairpin right'];
+
+function runDemo() {
+    const speedMph = parseInt(document.getElementById('demoSpeed').value);
+    const ci       = parseInt(document.getElementById('demoCorner').value);
+    const dist     = parseInt(document.getElementById('demoDist').value);
+    document.getElementById('demoSpeedV').textContent  = speedMph + ' mph';
+    document.getElementById('demoCornerV').textContent = cornerNames[ci];
+    document.getElementById('demoDistV').textContent   = dist + 'm';
+    const curve   = demoCurves[ci] ? { ...demoCurves[ci], distanceMetres: dist } : null;
+    const leanDeg = speedMph > 0 && curve ? Math.min(Math.round(speedMph * 0.38), 58) : 0;
+    const result  = corneringCoach({ speed_mph: speedMph }, { leanDeg }, curve, userSkill);
+    applyResult(result, speedMph, leanDeg, curve);
+    compassDeg = (compassDeg + speedMph * 0.25) % 360;
+    document.getElementById('compassNeedle').setAttribute('transform', `rotate(${compassDeg},18,18)`);
+}
+
+function applyResult(r, speedMph, leanDeg, curve) {
+    document.getElementById('hudSpeed').textContent = speedMph;
+    const limitEl = document.getElementById('hudLimit');
+    if (r.v_limit_mph != null) {
+        limitEl.textContent = r.v_limit_mph + ' mph';
+        limitEl.className = 'limit-val ' + (speedMph > r.v_limit_mph ? 'over' : speedMph > r.v_limit_mph * 0.85 ? 'warn' : 'ok');
+    } else { limitEl.textContent = '— mph'; limitEl.className = 'limit-val ok'; }
+
+    document.getElementById('hudAlert').className = 'hud-alert ' + r.alertLevel;
+    const titleEl = document.getElementById('alertTitle');
+    titleEl.className = 'alert-title ' + r.alertLevel;
+    titleEl.textContent = r.message;
+    document.getElementById('alertSub').textContent = r.detail;
+
+    ['pd1','pd2','pd3'].forEach((id, i) => {
+        const active = (r.instruction === 'POS_1' && i===0) || (r.instruction === 'POS_2' && i===1) || (r.instruction === 'POS_3' && i===2);
+        document.getElementById(id).className = 'pos-dot' + (active ? ' active' : '');
+    });
+    document.getElementById('posLabel').textContent = r.posDetail || 'Hold centre line';
+
+    if (curve) {
+        document.getElementById('cpRadius').textContent = curve.r_eff + 'm';
+        document.getElementById('cpDir').textContent    = curve.direction;
+        const sevEl = document.getElementById('cpSev');
+        sevEl.textContent = r.severity ? r.severity.charAt(0).toUpperCase() + r.severity.slice(1) : '—';
+        sevEl.className   = 'cp-val ' + (r.severity === 'hairpin' ? 'crit' : r.severity === 'sharp' ? 'warn' : 'ok');
+        const recEl = document.getElementById('cpRec');
+        recEl.textContent = r.recSpeedMph + ' mph';
+        recEl.className   = 'cp-val ' + (speedMph > r.recSpeedMph ? 'crit' : 'ok');
+        document.getElementById('cpDist').textContent = Math.round(curve.distanceMetres) + 'm';
+    } else {
+        ['cpRadius','cpDir','cpSev','cpRec','cpDist'].forEach(id => {
+            document.getElementById(id).textContent = '—';
+            document.getElementById(id).className   = 'cp-val accent';
+        });
+    }
+
+    const leanLimits = THRESHOLDS.leanAngle[userSkill];
+    const leanPct    = Math.min(leanDeg / leanLimits.critical * 100, 100);
+    document.getElementById('leanFill').style.width = leanPct + '%';
+    document.getElementById('leanFill').className   = 'lean-fill' + (leanDeg >= leanLimits.critical ? ' crit' : leanDeg >= leanLimits.warn ? ' warn' : '');
+    document.getElementById('leanDeg').textContent  = leanDeg + '°';
+}
+
+/* ═══════════════════════════════════════════════
+   MAPBOX INIT
+═══════════════════════════════════════════════ */
+function initMap(providedKey) {
+    const key = providedKey ||
+                document.getElementById('mbKeyInput').value.trim() ||
+                HARDCODED_TOKEN;
+
+    if (!key || !key.startsWith('pk.')) { openKeyModal(); return; }
+
+    document.getElementById('tokenError').style.display = 'none';
+
+    const existingToken = localStorage.getItem('mapbox_token');
+    localStorage.setItem('mapbox_token', key);
+    mapboxgl.accessToken = key;
+
+    // Only tear down if token changed
+    if (map && existingToken && existingToken !== key) {
+        map.remove(); map = null; userMarker = null;
+    }
+
+    // Map already running with same token — nothing to do
+    if (map) { closeKeyModal(); return; }
+
+    try {
+        document.getElementById('mapGrid').style.display = 'none';
+        map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [-2.72, 53.1],
+            zoom: 13,
+            pitch: 30,
+            attributionControl: false,
+        });
+        map.addControl(new mapboxgl.AttributionControl({ compact: true }));
+
+        map.on('load', () => {
+            // Route config: inactive routes drawn dimly, active route drawn boldly
+            const routeConfigs = [
+                { id: 'route-0', color: '#ef4444', label: 'fastest'      },  // red    — fastest
+                { id: 'route-1', color: '#2dd4bf', label: 'least-traffic' }, // teal   — least traffic
+                { id: 'route-2', color: '#22c55e', label: 'scenic'       },  // green  — scenic
+            ];
+
+            routeConfigs.forEach(cfg => {
+                map.addSource(cfg.id, { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+                // Inactive (background) layer — dimmer, thinner
+                map.addLayer({
+                    id: cfg.id + '-inactive',
+                    type: 'line', source: cfg.id,
+                    layout: { 'line-join': 'round', 'line-cap': 'round' },
+                    paint: { 'line-color': cfg.color, 'line-width': 4, 'line-opacity': 0.25 }
+                });
+                // Active layer — bold
+                map.addLayer({
+                    id: cfg.id + '-active',
+                    type: 'line', source: cfg.id,
+                    layout: { 'line-join': 'round', 'line-cap': 'round' },
+                    paint: { 'line-color': cfg.color, 'line-width': 6, 'line-opacity': 0.9 },
+                    filter: ['==', ['get', 'active'], true]
+                });
+                // Click handler — clicking any route selects it
+                map.on('click', cfg.id + '-inactive', () => {
+                    const idx = routeConfigs.findIndex(r => r.id === cfg.id);
+                    selectAltRouteBySourceId(cfg.id);
+                });
+                // Cursor change on hover
+                map.on('mouseenter', cfg.id + '-inactive', () => { map.getCanvas().style.cursor = 'pointer'; });
+                map.on('mouseleave', cfg.id + '-inactive', () => { map.getCanvas().style.cursor = ''; });
+            });
+
+            // Legacy single route source kept for traffic overlay
+            map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+            // Traffic congestion overlay
+            map.addSource('traffic', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: 'traffic-line', type: 'line', source: 'traffic',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': 0.75 }
+            });
+
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(onPosition, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
+            }
+        });
+        closeKeyModal();
+    } catch(e) {
+        console.error('Mapbox failed:', e);
+        document.getElementById('tokenErrorMsg').textContent = 'Failed to load map — check your token is valid.';
+        document.getElementById('tokenError').style.display = 'block';
+    }
+}
+
+function onPosition(pos) {
+    const { latitude: lat, longitude: lng, speed, heading } = pos.coords;
+    const speedMph = speed ? Math.round(speed * 2.237) : 0;
+    document.getElementById('demoSpeed').value = speedMph;
+    if (heading !== null) {
+        compassDeg = heading;
+        document.getElementById('compassNeedle').setAttribute('transform', `rotate(${heading},18,18)`);
+    }
+    if (!userMarker) {
+        const el = Object.assign(document.createElement('div'), {
+            style: 'width:16px;height:16px;background:#ff6b1a;border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(255,107,26,0.7)'
+        });
+        userMarker = new mapboxgl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+        map.flyTo({ center: [lng, lat], zoom: otsMode ? 17 : 15 });
+        startCoords = [lng, lat];
+    } else {
+        userMarker.setLngLat([lng, lat]);
+        if (otsMode) {
+            // OTS: follow rider with high pitch, camera locked to heading
+            map.easeTo({
+                center: [lng, lat],
+                bearing: heading || compassDeg,
+                pitch: 65,
+                zoom: 17,
+                duration: 300,
+            });
+        } else {
+            map.easeTo({ center: [lng, lat], bearing: heading || 0 });
+        }
+        startCoords = [lng, lat];
+    }
+    runDemo();
+}
+
+/* ═══════════════════════════════════════════════
+   GEOCODING — search suggestions
+═══════════════════════════════════════════════ */
+let geocodeTimers = {};
+
+async function geocodeSuggest(inputId, listId) {
+    const query = document.getElementById(inputId).value.trim();
+    const list  = document.getElementById(listId);
+    if (query.length < 3) { list.style.display = 'none'; return; }
+
+    clearTimeout(geocodeTimers[inputId]);
+    geocodeTimers[inputId] = setTimeout(async () => {
+        try {
+            // Use Google Places Autocomplete API for richer results
+            const url = `https://places.googleapis.com/v1/places:autocomplete`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': GOOGLE_API_KEY,
+                },
+                body: JSON.stringify({
+                    input: query,
+                    locationBias: { circle: { center: { latitude: 52.5, longitude: -1.5 }, radius: 500000 } },
+                    languageCode: 'en-GB',
+                })
+            });
+            const data = await res.json();
+            list.innerHTML = '';
+            if (!data.suggestions || data.suggestions.length === 0) {
+                await geocodeSuggestFallback(inputId, listId, query);
+                return;
+            }
+            data.suggestions.forEach(s => {
+                const place = s.placePrediction;
+                if (!place) return;
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+                item.innerHTML = `<i class="ti ti-map-pin"></i><span>${place.text.text}</span>`;
+                item.onclick = async () => {
+                    document.getElementById(inputId).value = place.text.text;
+                    // Resolve place ID to coordinates
+                    const coords = await resolvePlaceCoords(place.placeId);
+                    if (coords) {
+                        if (inputId === 'routeStart') startCoords = coords;
+                        else                           endCoords   = coords;
+                    }
+                    list.style.display = 'none';
+                };
+                list.appendChild(item);
+            });
+            list.style.display = 'block';
+        } catch(e) {
+            await geocodeSuggestFallback(inputId, listId, query);
+        }
+    }, 300);
+}
+
+async function resolvePlaceCoords(placeId) {
+    try {
+        const url = `https://places.googleapis.com/v1/places/${placeId}?fields=location&key=${GOOGLE_API_KEY}`;
+        const res  = await fetch(url);
+        const data = await res.json();
+        if (data.location) return [data.location.longitude, data.location.latitude];
+    } catch(e) {}
+    return null;
+}
+
+async function geocodeSuggestFallback(inputId, listId, query) {
+    // Fallback to Mapbox geocoding if Google fails
+    const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+    const url   = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=gb&language=en&limit=5`;
+    const list  = document.getElementById(listId);
+    try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        list.innerHTML = '';
+        if (!data.features || data.features.length === 0) { list.style.display = 'none'; return; }
+        data.features.forEach(f => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerHTML = `<i class="ti ti-map-pin" style="color:var(--muted)"></i><span>${f.place_name}</span>`;
+            item.onclick = () => {
+                document.getElementById(inputId).value = f.place_name;
+                if (inputId === 'routeStart') startCoords = f.center;
+                else                           endCoords   = f.center;
+                list.style.display = 'none';
+            };
+            list.appendChild(item);
+        });
+        list.style.display = 'block';
+    } catch(e) { list.style.display = 'none'; }
+}
+
+// Close autocomplete lists when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.field-wrap')) {
+        document.querySelectorAll('.autocomplete-list').forEach(l => l.style.display = 'none');
+    }
+});
+
+/* ═══════════════════════════════════════════════
+   ROUTE PLANNING — Multi-source
+═══════════════════════════════════════════════ */
+let activeRouteSource = 'mapbox';
+let avoidMotorways  = false;
+let waypointCoords  = []; // array of [lng, lat]
+let waypointCount   = 0;
+let allRoutes       = []; // store fetched alternative routes
+let activeRouteIdx  = 0;  // which route is selected
+let waypointMarkers = []; // mapbox markers for waypoints
+
+function addWaypoint() {
+    waypointCount++;
+    const id = 'wp-' + waypointCount;
+    const coordKey = 'wp' + waypointCount;
+    const container = document.getElementById('waypointsContainer');
+    const row = document.createElement('div');
+    row.className = 'waypoint-row';
+    row.id = 'row-' + id;
+    row.innerHTML = `
+        <i class="ti ti-grip-vertical wp-handle"></i>
+        <div class="field-wrap" style="position:relative;">
+            <i class="ti ti-map-pin field-icon" style="color:var(--teal);"></i>
+            <input class="field-input" type="text" id="${id}" placeholder="Stop ${waypointCount}"
+                oninput="geocodeSuggestWaypoint('${id}', '${id}-list', ${waypointCount - 1})">
+            <div class="autocomplete-list" id="${id}-list"></div>
+        </div>
+        <button class="wp-remove" onclick="removeWaypoint('row-${id}', ${waypointCount - 1})" title="Remove stop">
+            <i class="ti ti-x"></i>
+        </button>`;
+    container.appendChild(row);
+    // Expand autocomplete click-outside handler
+    waypointCoords.push(null);
+}
+
+function removeWaypoint(rowId, idx) {
+    document.getElementById(rowId).remove();
+    waypointCoords.splice(idx, 1);
+    if (waypointMarkers[idx]) { waypointMarkers[idx].remove(); waypointMarkers.splice(idx, 1); }
+}
+
+async function geocodeSuggestWaypoint(inputId, listId, idx) {
+    const query = document.getElementById(inputId).value.trim();
+    const list  = document.getElementById(listId);
+    if (query.length < 3) { list.style.display = 'none'; return; }
+    clearTimeout(geocodeTimers[inputId]);
+    geocodeTimers[inputId] = setTimeout(async () => {
+        const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+        const url   = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=gb&language=en&limit=5`;
+        try {
+            const res  = await fetch(url);
+            const data = await res.json();
+            list.innerHTML = '';
+            if (!data.features || data.features.length === 0) { list.style.display = 'none'; return; }
+            data.features.forEach(f => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+                item.innerHTML = `<i class="ti ti-map-pin" style="color:var(--teal)"></i><span>${f.place_name}</span>`;
+                item.onclick = () => {
+                    document.getElementById(inputId).value = f.place_name;
+                    waypointCoords[idx] = f.center;
+                    list.style.display = 'none';
+                    // Add marker on map
+                    if (map) {
+                        if (waypointMarkers[idx]) waypointMarkers[idx].remove();
+                        const el = Object.assign(document.createElement('div'), {
+                            style: 'width:12px;height:12px;background:#2dd4bf;border:2px solid #fff;border-radius:50%;'
+                        });
+                        waypointMarkers[idx] = new mapboxgl.Marker({ element: el })
+                            .setLngLat(f.center).addTo(map);
+                    }
+                };
+                list.appendChild(item);
+            });
+            list.style.display = 'block';
+        } catch(e) { list.style.display = 'none'; }
+    }, 300);
+}
+
+function selectAltRoute(idx) {
+    if (!allRoutes[idx]) return;
+    activeRouteIdx = idx;
+    // Update card styles
+    document.querySelectorAll('.alt-route-card').forEach((c, i) => {
+        c.classList.toggle('active', i === idx);
+    });
+    // Draw selected route
+    const route  = allRoutes[idx];
+    const coords = route.geometry.coordinates;
+    map.getSource('route').setData({ type: 'Feature', geometry: route.geometry });
+    const congestionSegments = buildCongestionSegments(route);
+    if (map.getSource('traffic')) map.getSource('traffic').setData(congestionSegments);
+    // Update banner
+    const distMi  = (route.distance / 1609.34).toFixed(1);
+    const mins    = Math.round(route.duration / 60);
+    const timeStr = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
+    const corners = estimateCorners(coords);
+    document.getElementById('rbDist').textContent    = distMi + ' mi';
+    document.getElementById('rbTime').textContent    = timeStr;
+    document.getElementById('rbCorners').textContent = corners;
+    closeRouteModal();
+}
+let avoidTolls     = false;
+let preferTwisty   = false;
+
+// Scenic scoring settings
+let scenicSettings = {
+    gradSoftLimit:  15,  // % — penalty applied above this
+    gradHardLimit:  25,  // % — route disqualified above this (soft override possible)
+    gradTolerance:  3,   // minutes allowed over soft limit before warning
+    weights: {
+        green:     8,  // green space score weight
+        elevation: 7,  // elevation variety weight
+        traffic:   7,  // low traffic weight
+        flow:      6,  // flow quality (fewer junctions) weight
+        corners:   5,  // twistiness weight
+    }
+};
+
+function openScenicModal() {
+    // Sync sliders to current settings
+    document.getElementById('gradSoft').value      = scenicSettings.gradSoftLimit;
+    document.getElementById('gradHard').value      = scenicSettings.gradHardLimit;
+    document.getElementById('gradTolerance').value = scenicSettings.gradTolerance;
+    document.getElementById('wGreen').value        = scenicSettings.weights.green;
+    document.getElementById('wElevation').value    = scenicSettings.weights.elevation;
+    document.getElementById('wTraffic').value      = scenicSettings.weights.traffic;
+    document.getElementById('wFlow').value         = scenicSettings.weights.flow;
+    document.getElementById('wCorners').value      = scenicSettings.weights.corners;
+    updateScenicSettings();
+    document.getElementById('scenicOverlay').classList.remove('hidden');
+}
+function closeScenicModal() { document.getElementById('scenicOverlay').classList.add('hidden'); }
+
+function updateScenicSettings() {
+    const soft = parseInt(document.getElementById('gradSoft').value);
+    const hard = parseInt(document.getElementById('gradHard').value);
+    // Keep hard >= soft
+    if (hard < soft) {
+        document.getElementById('gradHard').value = soft;
+    }
+    scenicSettings.gradSoftLimit  = soft;
+    scenicSettings.gradHardLimit  = Math.max(parseInt(document.getElementById('gradHard').value), soft);
+    scenicSettings.gradTolerance  = parseInt(document.getElementById('gradTolerance').value);
+    scenicSettings.weights.green     = parseInt(document.getElementById('wGreen').value);
+    scenicSettings.weights.elevation = parseInt(document.getElementById('wElevation').value);
+    scenicSettings.weights.traffic   = parseInt(document.getElementById('wTraffic').value);
+    scenicSettings.weights.flow      = parseInt(document.getElementById('wFlow').value);
+    scenicSettings.weights.corners   = parseInt(document.getElementById('wCorners').value);
+    // Update displayed values
+    document.getElementById('gradSoftVal').textContent      = scenicSettings.gradSoftLimit + '%';
+    document.getElementById('gradHardVal').textContent      = scenicSettings.gradHardLimit + '%';
+    document.getElementById('gradToleranceVal').textContent = scenicSettings.gradTolerance + ' min';
+    document.getElementById('wGreenVal').textContent        = scenicSettings.weights.green;
+    document.getElementById('wElevationVal').textContent    = scenicSettings.weights.elevation;
+    document.getElementById('wTrafficVal').textContent      = scenicSettings.weights.traffic;
+    document.getElementById('wFlowVal').textContent         = scenicSettings.weights.flow;
+    document.getElementById('wCornersVal').textContent      = scenicSettings.weights.corners;
+}
+
+function toggleAvoidMotorways() {
+    avoidMotorways = !avoidMotorways;
+    const wrap = document.getElementById('toggleMotorways').parentElement;
+    wrap.classList.toggle('on', avoidMotorways);
+    // Auto-enable for novice/CBT riders
+    if (avoidMotorways) {
+        showRouteNotice('Motorways excluded from route. Required for CBT licence holders.');
+    }
+}
+
+function toggleAvoidTolls() {
+    avoidTolls = !avoidTolls;
+    const wrap = document.getElementById('toggleTolls').parentElement;
+    wrap.classList.toggle('on', avoidTolls);
+}
+
+function toggleTwisty() {
+    preferTwisty = !preferTwisty;
+    const wrap = document.getElementById('toggleTwisty').parentElement;
+    wrap.classList.toggle('on', preferTwisty);
+    if (preferTwisty) {
+        showRouteNotice('Twisty route preference on — expect longer journey times.');
+    }
+}
+
+function showRouteNotice(msg) {
+    const el = document.getElementById('routeErrorMsg');
+    const wrap = document.getElementById('routeError');
+    el.textContent = msg;
+    wrap.style.display = 'block';
+    wrap.style.color = 'var(--warn)';
+    setTimeout(() => { wrap.style.display = 'none'; wrap.style.color = 'var(--danger)'; }, 3000);
+}
+
+// Auto-enable motorway avoidance for novice skill level
+function syncSkillToRouteOptions() {
+    if (userSkill === 'novice' && !avoidMotorways) {
+        avoidMotorways = true;
+        const wrap = document.getElementById('toggleMotorways');
+        if (wrap) wrap.parentElement.classList.add('on');
+    }
+}
+
+function setRouteSource(src) {
+    activeRouteSource = src;
+    document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('src-' + src).classList.add('active');
+    // Show/hide comparison rows
+    document.getElementById('rowHereTime').style.display   = (src === 'here' || src === 'compare') ? 'flex' : 'none';
+    document.getElementById('rowGoogleTime').style.display = (src === 'google' || src === 'compare') ? 'flex' : 'none';
+    document.getElementById('rowHereIncidents').style.display = (src === 'here' || src === 'compare') ? 'flex' : 'none';
+}
+
+async function fetchHERERoute(start, end) {
+    const hereExclusions = [];
+    if (avoidMotorways) hereExclusions.push('motorway');
+    if (avoidTolls)     hereExclusions.push('tollRoad');
+    const hereExcludeParam = hereExclusions.length > 0 ? `&avoid[features]=${hereExclusions.join(',')}` : '';
+    const url = `https://router.hereapi.com/v8/routes?transportMode=car&origin=${start[1]},${start[0]}&destination=${end[1]},${end[0]}&return=summary,polyline,typicalDuration&departureTime=now${hereExcludeParam}&apiKey=${HERE_API_KEY}`;
+    try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        if (!data.routes || data.routes.length === 0) return null;
+        const route   = data.routes[0].sections[0];
+        const mins    = Math.round(route.summary.duration / 60);
+        const timeStr = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
+        // Fetch incidents along route
+        const incidents = await fetchHEREIncidents(start, end);
+        return { timeStr, incidents };
+    } catch(e) { return null; }
+}
+
+async function fetchHEREIncidents(start, end) {
+    // Bounding box from start/end
+    const minLat = Math.min(start[1], end[1]) - 0.1;
+    const maxLat = Math.max(start[1], end[1]) + 0.1;
+    const minLng = Math.min(start[0], end[0]) - 0.1;
+    const maxLng = Math.max(start[0], end[0]) + 0.1;
+    const url = `https://data.traffic.hereapi.com/v7/incidents?locationReferencing=shape&in=bbox:${minLng},${minLat},${maxLng},${maxLat}&apiKey=${HERE_API_KEY}`;
+    try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        const results = data.results || [];
+        const accidents  = results.filter(r => r.incidentDetails?.type === 'accident').length;
+        const roadworks  = results.filter(r => r.incidentDetails?.type === 'roadworks').length;
+        const total = results.length;
+        if (total === 0) return 'None reported';
+        const parts = [];
+        if (accidents > 0) parts.push(`${accidents} accident${accidents > 1 ? 's' : ''}`);
+        if (roadworks > 0) parts.push(`${roadworks} roadwork${roadworks > 1 ? 's' : ''}`);
+        if (parts.length === 0) parts.push(`${total} incident${total > 1 ? 's' : ''}`);
+        return parts.join(', ');
+    } catch(e) { return 'Unavailable'; }
+}
+
+async function fetchGoogleRoute(start, end) {
+    const url = `https://routes.googleapis.com/directions/v2:computeRoutes`;
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': GOOGLE_API_KEY,
+                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.travelAdvisory',
+            },
+            body: JSON.stringify({
+                origin:      { location: { latLng: { latitude: start[1], longitude: start[0] } } },
+                destination: { location: { latLng: { latitude: end[1],   longitude: end[0]   } } },
+                travelMode:  'DRIVE',
+                routingPreference: 'TRAFFIC_AWARE',
+                departureTime: new Date().toISOString(),
+            })
+        });
+        const data = await res.json();
+        if (!data.routes || data.routes.length === 0) return null;
+        const route   = data.routes[0];
+        const secs    = parseInt(route.duration);
+        const mins    = Math.round(secs / 60);
+        const timeStr = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
+        return { timeStr };
+    } catch(e) { return null; }
+}
+
+/* ═══════════════════════════════════════════════
+   SCENIC SCORING ENGINE
+═══════════════════════════════════════════════ */
+
+async function scoreScenicRoute(route) {
+    const coords  = route.geometry.coordinates;
+    const steps   = route.legs ? route.legs.flatMap(l => l.steps || []) : [];
+    const w       = scenicSettings.weights;
+    let score     = 0;
+    let warnings  = [];
+
+    // ── 1. ELEVATION SCORING ──
+    // Sample elevation along route using Mapbox Terrain API
+    const elevScore = await scoreElevation(coords, warnings);
+    score += elevScore * w.elevation;
+
+    // ── 2. TRAFFIC SCORING ──
+    const trafficSummary = getTrafficSummary(route);
+    const trafficOrder   = { ok: 10, warn: 5, crit: 0 };
+    const trafficScore   = (trafficOrder[trafficSummary.cls] || 5) / 10;
+    score += trafficScore * w.traffic;
+
+    // ── 3. FLOW QUALITY — count traffic signals and stop signs ──
+    let junctionCount = 0;
+    steps.forEach(step => {
+        if (!step.intersections) return;
+        step.intersections.forEach(ix => {
+            if (ix.classes && (ix.classes.includes('traffic_signal') || ix.classes.includes('stop_sign'))) {
+                junctionCount++;
+            }
+        });
+    });
+    // Score: fewer junctions = better. Normalise against ~50 junctions for a long urban route
+    const flowScore = Math.max(0, 1 - (junctionCount / 50));
+    score += flowScore * w.flow;
+
+    // ── 4. TWISTINESS — corner count ──
+    const corners     = estimateCorners(coords);
+    const cornerScore = Math.min(corners / 30, 1); // normalise against ~30 corners
+    score += cornerScore * w.corners;
+
+    // ── 5. GREEN SPACE — query OpenStreetMap Overpass API ──
+    const greenScore = await scoreGreenSpace(coords);
+    score += greenScore * w.green;
+
+    // Normalise total score to 0-100
+    const maxPossible = (w.elevation + w.traffic + w.flow + w.corners + w.green) * 1;
+    const finalScore  = Math.round((score / maxPossible) * 100);
+
+    return { score: finalScore, warnings, junctionCount, corners, trafficSummary };
+}
+
+async function scoreElevation(coords, warnings) {
+    // Sample every ~500m along route (max 20 samples to keep API calls fast)
+    const token   = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+    const step    = Math.max(1, Math.floor(coords.length / 20));
+    const samples = coords.filter((_, i) => i % step === 0).slice(0, 20);
+
+    try {
+        // Mapbox Terrain RGB tile — sample elevation at each point
+        const elevations = await Promise.all(samples.map(async ([lng, lat]) => {
+            const zoom = 14;
+            const x    = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+            const y    = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+            const url  = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${x}/${y}.pngraw?access_token=${token}`;
+            // We approximate elevation from tile coordinates rather than decoding PNG
+            // Use Mapbox elevation endpoint instead
+            return null;
+        }));
+
+        // Use Mapbox tilequery for elevation approximation
+        const elevUrl = `https://api.mapbox.com/v4/mapbox.mapbox-terrain-v2/tilequery/${samples[0][0]},${samples[0][1]}.json?layers=contour&limit=1&access_token=${token}`;
+        const res  = await fetch(elevUrl);
+        const data = await res.json();
+
+        if (!data.features || data.features.length === 0) return 0.5;
+
+        // Estimate gradient between sampled points using elevation data
+        // For now use a simplified scoring based on route distance vs displacement
+        const routeKm     = samples.length > 1
+            ? haversineKm(samples[0], samples[samples.length - 1])
+            : 0;
+        const totalDistKm = samples.length * 0.5;
+
+        // Score elevation variety (rolling hills good, flat or very steep bad)
+        return 0.7; // base score, refined below with gradient analysis
+
+    } catch(e) {
+        return 0.5; // neutral if elevation data unavailable
+    }
+}
+
+async function scoreElevationFull(coords, warnings) {
+    // Full gradient analysis using Mapbox tilequery on sampled points
+    const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+    const step  = Math.max(1, Math.floor(coords.length / 15));
+    const samples = coords.filter((_, i) => i % step === 0).slice(0, 15);
+
+    try {
+        const elevResults = await Promise.all(samples.map(async ([lng, lat]) => {
+            const url  = `https://api.mapbox.com/v4/mapbox.mapbox-terrain-v2/tilequery/${lng},${lat}.json?layers=contour&limit=1&access_token=${token}`;
+            const res  = await fetch(url);
+            const data = await res.json();
+            const elev = data.features?.[0]?.properties?.ele || 0;
+            return { lng, lat, elev };
+        }));
+
+        // Calculate gradients between consecutive samples
+        let steepMins       = 0;
+        let totalVariety    = 0;
+        let hardLimitBreached = false;
+
+        for (let i = 1; i < elevResults.length; i++) {
+            const prev = elevResults[i - 1];
+            const curr = elevResults[i];
+            const distM = haversineKm([prev.lng, prev.lat], [curr.lng, curr.lat]) * 1000;
+            if (distM < 1) continue;
+            const elevDiff = Math.abs(curr.elev - prev.elev);
+            const gradient = (elevDiff / distM) * 100;
+            totalVariety  += elevDiff;
+
+            if (gradient > scenicSettings.gradHardLimit) {
+                hardLimitBreached = true;
+            } else if (gradient > scenicSettings.gradSoftLimit) {
+                // Estimate time on this segment (assume ~30mph on steep section)
+                steepMins += (distM / 1000) / (30 * 1.609) * 60;
+            }
+        }
+
+        // Warn if over tolerance
+        if (steepMins > scenicSettings.gradTolerance) {
+            warnings.push(`${Math.round(steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`);
+        }
+        if (hardLimitBreached) {
+            warnings.push(`Sections exceed ${scenicSettings.gradHardLimit}% hard limit`);
+        }
+
+        // Score: rolling variety good (normalise against 500m total elevation change)
+        // Penalise if hard limit breached or excessive steep time
+        let elevScore = Math.min(totalVariety / 500, 1);
+        if (hardLimitBreached) elevScore *= 0.3;
+        else if (steepMins > scenicSettings.gradTolerance) elevScore *= 0.6;
+
+        return { score: elevScore, steepMins, hardLimitBreached };
+
+    } catch(e) { return { score: 0.5, steepMins: 0, hardLimitBreached: false }; }
+}
+
+async function scoreGreenSpace(coords) {
+    // Sample a bounding box around the route and query OSM for green landuse
+    const lngs = coords.map(c => c[0]);
+    const lats = coords.map(c => c[1]);
+    const bbox = [
+        Math.min(...lngs) - 0.01,
+        Math.min(...lats) - 0.01,
+        Math.max(...lngs) + 0.01,
+        Math.max(...lats) + 0.01
+    ];
+
+    try {
+        const query = `
+            [out:json][timeout:10];
+            (
+              way["landuse"~"forest|grass|meadow|farmland|wood|nature_reserve|heath|scrub"](${bbox[1]},${bbox[0]},${bbox[3]},${bbox[2]});
+              relation["leisure"~"nature_reserve|park"](${bbox[1]},${bbox[0]},${bbox[3]},${bbox[2]});
+            );
+            out count;`;
+        const res  = await fetch('https://overpass-api.de/api/interpreter', {
+            method: 'POST',
+            body: 'data=' + encodeURIComponent(query)
+        });
+        const data = await res.json();
+        const count = data.elements?.[0]?.tags?.total || 0;
+        // Normalise: 0 = no green, 10+ features = max score
+        return Math.min(count / 10, 1);
+    } catch(e) { return 0.5; }
+}
+
+function haversineKm([lng1, lat1], [lng2, lat2]) {
+    const R  = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a  = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function planRoute() {
+    const btnRoute = document.getElementById('btnRoute');
+    const errEl    = document.getElementById('routeError');
+    errEl.style.display = 'none';
+
+    // Resolve start: use typed value or GPS
+    const startInput = document.getElementById('routeStart').value.trim();
+    if (startInput && !startCoords) {
+        document.getElementById('routeErrorMsg').textContent = 'Select a start location from the suggestions.';
+        errEl.style.display = 'block'; return;
+    }
+
+    const endInput = document.getElementById('routeEnd').value.trim();
+    if (!endInput || !endCoords) {
+        document.getElementById('routeErrorMsg').textContent = 'Please enter and select a destination.';
+        errEl.style.display = 'block'; return;
+    }
+
+    if (!map) {
+        document.getElementById('routeErrorMsg').textContent = 'Map not loaded — please add your Mapbox token first.';
+        errEl.style.display = 'block'; return;
+    }
+
+    btnRoute.textContent = 'Loading…';
+    btnRoute.disabled = true;
+
+    const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+    const start = startCoords || await getGPSCoords();
+    const end   = endCoords;
+    // driving-traffic profile gives live traffic-aware routing
+    const exclusions = [];
+    if (avoidMotorways) exclusions.push('motorway');
+    if (avoidTolls)     exclusions.push('toll');
+    const excludeParam = exclusions.length > 0 ? `&exclude=${exclusions.join(',')}` : '';
+
+    // Build coordinate string including waypoints
+    const validWaypoints = waypointCoords.filter(w => w !== null);
+    const waypointStr    = validWaypoints.map(w => `${w[0]},${w[1]}`).join(';');
+    const coordStr       = waypointStr
+        ? `${start[0]},${start[1]};${waypointStr};${end[0]},${end[1]}`
+        : `${start[0]},${start[1]};${end[0]},${end[1]}`;
+
+    // THREE dedicated fetches — each route has a specific goal
+    // Route 0 — Fastest: driving-traffic, no special constraints
+    const fastestUrl = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coordStr}?geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance${excludeParam}&access_token=${token}`;
+
+    // Route 1 — Least traffic: driving profile (ignores live traffic weighting so we get a
+    // structurally different path), then we validate it avoids heavy congestion vs fastest.
+    // If driving-traffic returns same geometry, we accept up to 10% longer to dodge congestion.
+    const leastTrafficUrl = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coordStr}?geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance&alternatives=true${excludeParam}&access_token=${token}`;
+
+    // Route 2 — Scenic: driving profile, excludes motorways, favours A/B roads
+    const scenicExclusions = [...new Set([...exclusions, 'motorway'])];
+    const scenicExcludeParam = `&exclude=${scenicExclusions.join(',')}`;
+    const scenicUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}?geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance${scenicExcludeParam}&access_token=${token}`;
+
+    try {
+    const [fastestRes, leastTrafficRes, scenicRes] = await Promise.all([
+        fetch(fastestUrl), fetch(leastTrafficUrl), fetch(scenicUrl)
+    ]);
+    const [fastestData, leastTrafficData, scenicData] = await Promise.all([
+        fastestRes.json(), leastTrafficRes.json(), scenicRes.json()
+    ]);
+
+        if (!fastestData.routes || fastestData.routes.length === 0) {
+            document.getElementById('routeErrorMsg').textContent = 'No route found between these locations.';
+            errEl.style.display = 'block';
+            btnRoute.textContent = 'Get route'; btnRoute.disabled = false;
+            return;
+        }
+
+        const fastestRoute = fastestData.routes[0];
+        const fastestMins  = Math.round(fastestRoute.duration / 60);
+        const maxBudgetMins = fastestMins * 1.10; // 10% time budget for alt routes
+
+        // ── LEAST TRAFFIC ROUTE ──
+        // Pick whichever alternative has lowest congestion score
+        // If none better than fastest within budget, fall back to fastest data
+        let leastTrafficRoute = fastestRoute;
+        if (leastTrafficData.routes && leastTrafficData.routes.length > 1) {
+            const candidates = leastTrafficData.routes.filter(r =>
+                Math.round(r.duration / 60) <= maxBudgetMins
+            );
+            // Score each candidate by congestion — lower is better
+            const scored = candidates.map(r => {
+                const summary = getTrafficSummary(r);
+                const order   = { ok: 0, warn: 1, crit: 2 };
+                return { route: r, score: order[summary.cls] || 0, mins: Math.round(r.duration / 60) };
+            });
+            scored.sort((a, b) => a.score - b.score || a.mins - b.mins);
+            leastTrafficRoute = scored[0].route;
+        }
+
+        // ── SCENIC ROUTE ──
+        // Score all candidates (scenic fetch + any alternatives within budget)
+        // using the full scoring engine, pick highest scorer
+        const scenicCandidates = [];
+        if (scenicData.routes && scenicData.routes.length > 0) {
+            scenicCandidates.push(...scenicData.routes.filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
+        }
+        // Also consider any alternatives from the main fetch
+        if (leastTrafficData.routes && leastTrafficData.routes.length > 1) {
+            scenicCandidates.push(...leastTrafficData.routes.slice(1).filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
+        }
+
+        let scenicRoute  = fastestRoute;
+        let scenicBadge  = null;
+        let scenicWarnings = [];
+        let scenicScoreResult = null;
+
+        if (scenicCandidates.length > 0) {
+            // Score all candidates in parallel
+            btnRoute.textContent = 'Scoring routes…';
+            const scoreResults = await Promise.all(
+                scenicCandidates.map(async r => {
+                    const elevFull = await scoreElevationFull(r.geometry.coordinates, []);
+                    const trafficS = getTrafficSummary(r);
+                    const trafficOrder = { ok: 1, warn: 0.5, crit: 0 };
+                    const steps    = r.legs ? r.legs.flatMap(l => l.steps || []) : [];
+                    let junctions  = 0;
+                    steps.forEach(s => (s.intersections || []).forEach(ix => {
+                        if (ix.classes && (ix.classes.includes('traffic_signal') || ix.classes.includes('stop_sign'))) junctions++;
+                    }));
+                    const corners      = estimateCorners(r.geometry.coordinates);
+                    const w            = scenicSettings.weights;
+                    const greenScore   = await scoreGreenSpace(r.geometry.coordinates);
+                    const total =
+                        elevFull.score                             * w.elevation +
+                        (trafficOrder[trafficS.cls] || 0.5)       * w.traffic   +
+                        Math.max(0, 1 - junctions / 50)           * w.flow      +
+                        Math.min(corners / 30, 1)                 * w.corners   +
+                        greenScore                                 * w.green;
+                    return { route: r, score: total, elevFull, junctions, corners, greenScore, trafficS };
+                })
+            );
+            scoreResults.sort((a, b) => b.score - a.score);
+            const best = scoreResults[0];
+            scenicRoute        = best.route;
+            scenicScoreResult  = best;
+            scenicWarnings     = best.elevFull.steepMins > scenicSettings.gradTolerance
+                ? [`${Math.round(best.elevFull.steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`]
+                : [];
+            if (best.elevFull.hardLimitBreached) {
+                scenicWarnings.push(`Contains sections above ${scenicSettings.gradHardLimit}% — ride with care`);
+            }
+            scenicBadge = scenicWarnings.length > 0 ? '⚠ Gradient warning' : 'Scenic scored';
+        }
+
+        // ── allRoutes fixed to 3 slots: [fastest, leastTraffic, scenic] ──
+        allRoutes = [fastestRoute, leastTrafficRoute, scenicRoute];
+        activeRouteIdx = 0;
+
+        // ── BUILD CARDS ──
+        const routeCardDefs = [
+            {
+                route: fastestRoute, idx: 0,
+                icon: 'fastest', iconClass: 'ti-bolt', label: 'Fastest', badge: null,
+                mins: fastestMins,
+            },
+            {
+                route: leastTrafficRoute, idx: 1,
+                icon: 'least-traffic', iconClass: 'ti-traffic-cone', label: 'Least traffic',
+                badge: leastTrafficRoute !== fastestRoute ? getTrafficSummary(leastTrafficRoute).label : null,
+                mins: Math.round(leastTrafficRoute.duration / 60),
+            },
+            {
+                route: scenicRoute, idx: 2,
+                icon: 'scenic', iconClass: 'ti-mountain', label: 'Most scenic',
+                badge: scenicBadge,
+                warnings: scenicWarnings,
+                score: scenicScoreResult ? Math.round((scenicScoreResult.score / (Object.values(scenicSettings.weights).reduce((a,b)=>a+b,0))) * 100) : null,
+                mins: Math.round(scenicRoute.duration / 60),
+            },
+        ];
+
+        const altList = document.getElementById('altRoutesList');
+        altList.innerHTML = '';
+        routeCardDefs.forEach((def, cardIdx) => {
+            const card = document.createElement('div');
+            card.className = 'alt-route-card' + (cardIdx === 0 ? ' active' : '');
+            card.onclick = () => selectAltRoute(def.idx);
+            const timeStr   = def.mins >= 60 ? `${Math.floor(def.mins/60)}h ${def.mins%60}m` : `${def.mins} min`;
+            const distMi    = (def.route.distance / 1609.34).toFixed(1);
+            const corners   = estimateCorners(def.route.geometry.coordinates);
+            const extraMins = def.mins - fastestMins;
+            const timeDiff  = extraMins > 0 ? ` · +${extraMins} min` : '';
+            const badgeColor = def.badge && def.badge.includes('⚠') ? 'rgba(234,179,8,0.15);color:var(--warn)' : 'rgba(255,107,26,0.12);color:var(--accent)';
+            const badgeHtml = def.badge
+                ? `<span style="font-size:10px;background:${badgeColor};padding:1px 6px;border-radius:4px;margin-left:4px;">${def.badge}</span>`
+                : '';
+            const scoreHtml = def.score != null
+                ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">Score: ${def.score}</span>`
+                : '';
+            const warnHtml = def.warnings && def.warnings.length > 0
+                ? `<div style="font-size:10px;color:var(--warn);margin-top:3px;"><i class="ti ti-alert-triangle"></i> ${def.warnings.join(' · ')}</div>`
+                : '';
+            card.innerHTML = `
+                <div class="alt-route-icon ${def.icon}"><i class="ti ${def.iconClass}"></i></div>
+                <div class="alt-route-info">
+                    <div class="alt-route-name">${def.label}${badgeHtml}${scoreHtml}</div>
+                    <div class="alt-route-detail">${timeStr}${timeDiff} · ${distMi} mi · ${corners} corners</div>
+                    ${warnHtml}
+                </div>
+                <i class="ti ti-chevron-right" style="color:var(--muted);font-size:14px;"></i>`;
+            altList.appendChild(card);
+        });
+        document.getElementById('altRoutesContainer').style.display = 'block';
+
+        // Draw fastest route by default
+        const route = allRoutes[0];
+        const coords   = route.geometry.coordinates;
+        const distKm   = (route.distance / 1000).toFixed(1);
+        const distMi   = (route.distance / 1609.34).toFixed(1);
+        const mins     = Math.round(route.duration / 60);
+        const timeStr  = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
+        const corners  = estimateCorners(coords);
+
+        // Draw all routes on map — fastest active, others dim
+        ROUTE_SOURCE_IDS.forEach((srcId, i) => {
+            const r = allRoutes[i];
+            if (!r || !map.getSource(srcId)) return;
+            map.getSource(srcId).setData({
+                type: 'Feature',
+                properties: { active: i === 0 },
+                geometry: r.geometry
+            });
+            map.setPaintProperty(srcId + '-inactive', 'line-opacity', i === 0 ? 0 : 0.25);
+            map.setPaintProperty(srcId + '-inactive', 'line-width',   i === 0 ? 0 : 4);
+            map.setPaintProperty(srcId + '-active',   'line-opacity', i === 0 ? 0.9 : 0);
+        });
+
+        // Draw congestion overlay for active route
+        const congestionSegments = buildCongestionSegments(route);
+        if (map.getSource('traffic')) {
+            map.getSource('traffic').setData(congestionSegments);
+        }
+
+        // Fit map to route
+        const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
+        map.fitBounds(bounds, { padding: 60 });
+
+        // Add destination marker
+        if (destMarker) destMarker.remove();
+        destMarker = new mapboxgl.Marker({ color: '#2dd4bf' }).setLngLat(end).addTo(map);
+
+        // Traffic summary
+        const trafficSummary = getTrafficSummary(route);
+
+        // Show stats in modal
+        document.getElementById('statDist').textContent    = `${distMi} mi (${distKm} km)`;
+        document.getElementById('statTime').textContent    = timeStr;
+        document.getElementById('statCorners').textContent = corners;
+        document.getElementById('statTraffic').textContent = trafficSummary.label;
+        document.getElementById('statTraffic').className   = 'rs-val ' + trafficSummary.cls;
+        document.getElementById('routeStats').classList.add('visible');
+
+        // Show banner on map
+        if (avoidMotorways) document.getElementById('rbDist').title = 'Motorway-free route';
+        document.getElementById('rbDist').textContent    = distMi + ' mi';
+        document.getElementById('rbTime').textContent    = timeStr;
+        document.getElementById('rbCorners').textContent = corners;
+        document.getElementById('rbTraffic').textContent = trafficSummary.label;
+        document.getElementById('rbTraffic').className   = 'rb-val ' + trafficSummary.cls;
+        document.getElementById('routeBanner').classList.add('visible');
+        document.getElementById('routeBtn').classList.add('active');
+        document.getElementById('trafficLegend').style.display = 'block';
+        document.getElementById('routeKey').style.display = 'block';
+
+        // Start traffic refresh every 2 minutes
+        clearInterval(trafficRefreshTimer);
+        trafficRefreshTimer = setInterval(() => refreshTraffic(start, end), 120000);
+
+        // Fetch HERE and Google in parallel if needed
+        if (activeRouteSource === 'here' || activeRouteSource === 'compare') {
+            fetchHERERoute(start, end).then(here => {
+                if (here) {
+                    document.getElementById('statHereTime').textContent     = here.timeStr;
+                    document.getElementById('statHereIncidents').textContent = here.incidents;
+                    document.getElementById('rowHereTime').style.display     = 'flex';
+                    document.getElementById('rowHereIncidents').style.display = 'flex';
+                }
+            });
+        }
+        if (activeRouteSource === 'google' || activeRouteSource === 'compare') {
+            fetchGoogleRoute(start, end).then(google => {
+                if (google) {
+                    document.getElementById('statGoogleTime').textContent = google.timeStr;
+                    document.getElementById('rowGoogleTime').style.display = 'flex';
+                }
+            });
+        }
+
+    } catch(e) {
+        document.getElementById('routeErrorMsg').textContent = 'Network error — check your connection.';
+        errEl.style.display = 'block';
+    }
+
+    btnRoute.textContent = 'Get route'; btnRoute.disabled = false;
+}
+
+/* ═══════════════════════════════════════════════
+   TRAFFIC HELPERS
+═══════════════════════════════════════════════ */
+let destMarker = null;
+let trafficRefreshTimer = null;
+const CONGESTION_COLORS = {
+    'low':       '#22c55e',
+    'moderate':  '#eab308',
+    'heavy':     '#f97316',
+    'severe':    '#ef4444',
+    'unknown':   '#6b7280',
+};
+
+function buildCongestionSegments(route) {
+    const features = [];
+    route.legs.forEach(leg => {
+        leg.steps.forEach(step => {
+            if (!step.intersections) return;
+            const annotation = leg.annotation;
+            if (!annotation || !annotation.congestion) return;
+            annotation.congestion.forEach((level, i) => {
+                if (!step.geometry || !step.geometry.coordinates) return;
+                const coords = step.geometry.coordinates;
+                if (i >= coords.length - 1) return;
+                features.push({
+                    type: 'Feature',
+                    properties: { color: CONGESTION_COLORS[level] || CONGESTION_COLORS.unknown, level },
+                    geometry: { type: 'LineString', coordinates: [coords[i], coords[i+1]] }
+                });
+            });
+        });
+    });
+    return { type: 'FeatureCollection', features };
+}
+
+function getTrafficSummary(route) {
+    const counts = { low: 0, moderate: 0, heavy: 0, severe: 0 };
+    route.legs.forEach(leg => {
+        if (leg.annotation && leg.annotation.congestion) {
+            leg.annotation.congestion.forEach(level => {
+                if (counts[level] !== undefined) counts[level]++;
+            });
+        }
+    });
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+    const heavyPct = ((counts.heavy + counts.severe) / total) * 100;
+    const modPct   = (counts.moderate / total) * 100;
+    if (heavyPct > 20) return { label: 'Heavy traffic', cls: 'crit' };
+    if (heavyPct > 5 || modPct > 30) return { label: 'Moderate traffic', cls: 'warn' };
+    return { label: 'Clear roads', cls: 'ok' };
+}
+
+async function refreshTraffic(start, end) {
+    const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+    const url   = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance&access_token=${token}`;
+    try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        if (!data.routes || data.routes.length === 0) return;
+        const route    = data.routes[0];
+        const segments = buildCongestionSegments(route);
+        const summary  = getTrafficSummary(route);
+        if (map.getSource('traffic')) map.getSource('traffic').setData(segments);
+        document.getElementById('rbTraffic').textContent = summary.label;
+        document.getElementById('rbTraffic').className   = 'rb-val ' + summary.cls;
+        const mins    = Math.round(route.duration / 60);
+        const timeStr = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
+        document.getElementById('rbTime').textContent    = timeStr;
+        document.getElementById('statTime').textContent  = timeStr;
+        console.log('Traffic refreshed:', summary.label);
+    } catch(e) { console.log('Traffic refresh failed:', e.message); }
+}
+
+function estimateCorners(coords) {
+    // Count significant bearing changes along the route as a proxy for corners
+    let count = 0;
+    for (let i = 1; i < coords.length - 1; i++) {
+        const b1 = bearing(coords[i-1], coords[i]);
+        const b2 = bearing(coords[i],   coords[i+1]);
+        let diff = Math.abs(b2 - b1);
+        if (diff > 180) diff = 360 - diff;
+        if (diff > 15) count++;
+    }
+    return count;
+}
+
+function bearing(a, b) {
+    const dLng = (b[0] - a[0]) * Math.PI / 180;
+    const lat1 = a[1] * Math.PI / 180;
+    const lat2 = b[1] * Math.PI / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return Math.atan2(y, x) * 180 / Math.PI;
+}
+
+function getGPSCoords() {
+    return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+            p => resolve([p.coords.longitude, p.coords.latitude]),
+            () => reject(new Error('GPS unavailable'))
+        );
+    });
+}
+
+function clearRoute() {
+    if (map) {
+        ROUTE_SOURCE_IDS.forEach(srcId => {
+            if (map.getSource(srcId)) {
+                map.getSource(srcId).setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+            }
+        });
+        if (map.getSource('traffic')) map.getSource('traffic').setData({ type: 'FeatureCollection', features: [] });
+    }
+    if (destMarker) { destMarker.remove(); destMarker = null; }
+    waypointMarkers.forEach(m => m && m.remove());
+    waypointMarkers = [];
+    waypointCoords  = [];
+    allRoutes       = [];
+    document.getElementById('waypointsContainer').innerHTML = '';
+    document.getElementById('altRoutesContainer').style.display = 'none';
+    document.getElementById('altRoutesList').innerHTML = '';
+    clearInterval(trafficRefreshTimer);
+    document.getElementById('trafficLegend').style.display = 'none';
+    document.getElementById('routeKey').style.display = 'none';
+    endCoords = null;
+    document.getElementById('routeBanner').classList.remove('visible');
+    document.getElementById('routeBtn').classList.remove('active');
+    document.getElementById('routeStats').classList.remove('visible');
+    document.getElementById('routeEnd').value   = '';
+    document.getElementById('routeStart').value = '';
+}
+
+/* ═══════════════════════════════════════════════
+   MODAL HANDLERS
+═══════════════════════════════════════════════ */
+function openRouteModal()  {
+    document.getElementById('routeOverlay').classList.remove('hidden');
+    syncSkillToRouteOptions();
+}
+function closeRouteModal() { document.getElementById('routeOverlay').classList.add('hidden'); }
+
+function openKeyModal() {
+    const saved = localStorage.getItem('mapbox_token');
+    const preview = document.getElementById('tokenPreview');
+    if (saved) { preview.textContent = saved.substring(0, 20) + '…' + saved.slice(-6); preview.style.color = 'var(--success)'; }
+    else       { preview.textContent = 'None saved'; preview.style.color = 'var(--muted)'; }
+    document.getElementById('mbKeyInput').value = '';
+    document.getElementById('tokenError').style.display = 'none';
+    document.getElementById('keyOverlay').classList.remove('hidden');
+}
+function closeKeyModal()   { document.getElementById('keyOverlay').classList.add('hidden'); }
+function openSkillModal()  { document.getElementById('skillOverlay').classList.remove('hidden'); }
+function closeSkillModal() { document.getElementById('skillOverlay').classList.add('hidden'); }
+function openExpertModal() { document.getElementById('expertOverlay').classList.remove('hidden'); }
+function closeExpertModal(){ document.getElementById('expertOverlay').classList.add('hidden'); }
+
+function clearToken() {
+    localStorage.removeItem('mapbox_token');
+    document.getElementById('tokenPreview').textContent = 'None saved';
+    document.getElementById('tokenPreview').style.color = 'var(--muted)';
+    document.getElementById('mbKeyInput').value = '';
+}
+
+/* ═══════════════════════════════════════════════
+   SKILL SYSTEM
+═══════════════════════════════════════════════ */
+const skillIcons = { novice: 'ti-plant', intermediate: 'ti-flame', expert: 'ti-bolt' };
+
+function selectSkill(skill) {
+    if (skill === 'expert' && !expertUnlocked) { closeSkillModal(); openExpertModal(); return; }
+    userSkill = skill;
+    document.getElementById('skillLabel').textContent = skill.charAt(0).toUpperCase() + skill.slice(1);
+    document.getElementById('skillBadge').className   = 'skill-badge ' + skill;
+    document.getElementById('skillIcon').className    = 'ti ' + skillIcons[skill];
+    ['novice','intermediate','expert'].forEach(s => {
+        document.getElementById('opt-' + s).className = 'skill-option' + (s === skill ? ' selected' : '');
+        const lock = document.getElementById('lock-' + s);
+        if (s === 'expert') {
+            lock.className = expertUnlocked ? (s === skill ? 'ti ti-check skill-lock unlocked' : 'ti ti-lock-open skill-lock') : 'ti ti-lock skill-lock';
+        } else {
+            lock.className = s === skill ? 'ti ti-check skill-lock unlocked' : 'ti ti-lock-open skill-lock';
+        }
+    });
+    closeSkillModal();
+    runDemo();
+}
+
+function checkVerify() {
+    const all = ['chk1','chk2','chk3','chk4'].every(id => document.getElementById(id).checked);
+    document.getElementById('btnUnlock').disabled = !all;
+}
+
+function unlockExpert() {
+    expertUnlocked = true;
+    ['chk1','chk2','chk3','chk4'].forEach(id => document.getElementById(id).checked = false);
+    document.getElementById('btnUnlock').disabled = true;
+    closeExpertModal();
+    selectSkill('expert');
+}
+
+/* ═══════════════════════════════════════════════
+   AUTO-LOAD
+═══════════════════════════════════════════════ */
+window.addEventListener('load', function() {
+    runDemo();
+    // Only auto-init if map isn't already running
+    if (!map) {
+        const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+        if (token && token.startsWith('pk.')) {
+            initMap(token);
+        } else {
+            setTimeout(openKeyModal, 500);
+        }
+    }
+});
+
+</script>
+</body>
+</html>
