@@ -328,6 +328,15 @@
             <span id="sensorWarnMsg"></span>
         </div>
 
+        <!-- Floating route picker — shown after route planning, before nav starts -->
+        <div id="routePicker" style="display:none;position:absolute;bottom:90px;left:12px;right:12px;background:rgba(10,12,15,0.95);border:1px solid var(--border);border-radius:14px;padding:12px 14px;z-index:20;backdrop-filter:blur(6px);">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Tap a route on the map or select below</div>
+            <div id="routePickerCards" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+            <button onclick="startNavigationFromModal()" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:12px;color:#fff;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(59,130,246,0.3);">
+                <i class="ti ti-navigation"></i> Start navigation
+            </button>
+        </div>
+
         <!-- Rally card overlay — appears in front of map for corners/junctions/roundabouts -->
         <div id="rallyCard" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:50;pointer-events:none;"></div>
 
@@ -746,41 +755,18 @@
             </button>
         </div>
 
-        <!-- Data source selector -->
-        <div style="display:flex;gap:6px;margin-bottom:12px;" id="sourceSelector">
-            <button class="source-btn active" id="src-mapbox" onclick="setRouteSource('mapbox')">Mapbox</button>
-            <button class="source-btn" id="src-here" onclick="setRouteSource('here')">HERE</button>
-            <button class="source-btn" id="src-google" onclick="setRouteSource('google')">Google</button>
-            <button class="source-btn" id="src-compare" onclick="setRouteSource('compare')">Compare all</button>
+        <!-- Routes drawn on map — hidden container keeps IDs alive for JS -->
+        <div id="altRoutesContainer" style="display:none;">
+            <div id="altRoutesList"></div>
         </div>
-
-        <!-- Alternative routes selector -->
-        <div id="altRoutesContainer" style="display:none;margin-bottom:12px;">
-            <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px;">Alternative routes — tap to select</div>
-            <div id="altRoutesList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
-            <!-- Start Navigation button — appears once routes are loaded -->
-            <button id="btnStartNavModal" onclick="startNavigationFromModal()"
-                style="width:100%;background:var(--accent);border:none;border-radius:12px;padding:13px;color:#fff;font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity 0.15s;box-shadow:0 4px 16px rgba(59,130,246,0.35);">
-                <i class="ti ti-navigation" aria-hidden="true"></i> Start navigation
-            </button>
-        </div>
-
-        <div class="route-stats" id="routeStats">
-            <div class="rs-row"><span class="rs-label">Distance</span><span class="rs-val" id="statDist">—</span></div>
-            <div class="rs-row" id="rowMapboxTime" style="border-left:3px solid #3b82f6;padding-left:8px;margin-left:-8px;">
-                <span class="rs-label">Mapbox time</span><span class="rs-val" id="statTime">—</span>
-            </div>
-            <div class="rs-row" id="rowHereTime" style="display:none;border-left:3px solid #2dd4bf;padding-left:8px;margin-left:-8px;">
-                <span class="rs-label">HERE time</span><span class="rs-val" id="statHereTime">—</span>
-            </div>
-            <div class="rs-row" id="rowGoogleTime" style="display:none;border-left:3px solid #4285f4;padding-left:8px;margin-left:-8px;">
-                <span class="rs-label">Google time</span><span class="rs-val" id="statGoogleTime">—</span>
-            </div>
-            <div class="rs-row"><span class="rs-label">Corners detected</span><span class="rs-val accent" id="statCorners">—</span></div>
-            <div class="rs-row"><span class="rs-label">Traffic (Mapbox)</span><span class="rs-val ok" id="statTraffic">—</span></div>
-            <div class="rs-row" id="rowHereIncidents" style="display:none;">
-                <span class="rs-label">HERE incidents</span><span class="rs-val" id="statHereIncidents">—</span>
-            </div>
+        <!-- Hidden stats fields kept for JS compatibility -->
+        <div style="display:none;" id="routeStats">
+            <span id="statDist"></span><span id="statTime"></span>
+            <span id="statHereTime"></span><span id="statGoogleTime"></span>
+            <span id="statCorners"></span><span id="statTraffic"></span>
+            <span id="statHereIncidents"></span>
+            <div id="rowMapboxTime"></div><div id="rowHereTime"></div>
+            <div id="rowGoogleTime"></div><div id="rowHereIncidents"></div>
         </div>
     </div>
 </div>
@@ -865,7 +851,8 @@
 ═══════════════════════════════════════════════ */
 const HARDCODED_TOKEN = 'pk.eyJ1Ijoic2lkdGhlc2xldXRoIiwiYSI6ImNtcDFlZ3U3aTAyN24yeHIyZnJmbHJidWUifQ.NQrvkcIP5nbxAzA9RAf46A'; // replace with your Mapbox token
 const HERE_API_KEY    = '3Sn0lEOSASv2nSy6LaTyPQJwSrW82YWKwvayuO-Qldo';    // replace with your HERE API key
-const GOOGLE_API_KEY  = 'AIzaSyCeST9lZAPiMbkdX8aHYPGcp4jqoflGvls';  // replace with your Google API key
+const GOOGLE_API_KEY  = 'AIzaSyCeST9lZAPiMbkdX8aHYPGcp4jqoflGvls';  // replace with your Google API ke
+
 const THRESHOLDS = {
     corners: {
         gentle:  { minRadius: 60, recSpeedMph: { novice: 35, intermediate: 50, expert: 65 } },
@@ -1993,7 +1980,7 @@ document.addEventListener('click', (e) => {
 /* ═══════════════════════════════════════════════
    ROUTE PLANNING — Multi-source
 ═══════════════════════════════════════════════ */
-let activeRouteSource = 'mapbox';
+let activeRouteSource = 'compare'; // always fetch all sources in background
 let avoidMotorways  = false;
 let waypointCoords  = []; // array of [lng, lat]
 let waypointCount   = 0;
@@ -2120,6 +2107,8 @@ function selectAltRoute(idx) {
     // Flash banner border colour to confirm selection
     showMapRouteLabel(idx);
     closeRouteModal();
+    // Refresh picker if visible
+    if (document.getElementById('routePicker')?.style.display !== 'none') showMapRoutePicker();
 }
 let avoidTolls     = false;
 let preferTwisty   = false;
@@ -2223,13 +2212,7 @@ function syncSkillToRouteOptions() {
 }
 
 function setRouteSource(src) {
-    activeRouteSource = src;
-    document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('src-' + src).classList.add('active');
-    // Show/hide comparison rows
-    document.getElementById('rowHereTime').style.display   = (src === 'here' || src === 'compare') ? 'flex' : 'none';
-    document.getElementById('rowGoogleTime').style.display = (src === 'google' || src === 'compare') ? 'flex' : 'none';
-    document.getElementById('rowHereIncidents').style.display = (src === 'here' || src === 'compare') ? 'flex' : 'none';
+    activeRouteSource = src; // kept for backend — UI buttons removed
 }
 
 async function fetchHERERoute(start, end) {
@@ -2488,8 +2471,9 @@ function startNavigation() {
     document.getElementById('btnStartNav').style.display = 'none';
     document.getElementById('endNavBar').style.display   = 'flex';
 
-    // Hide style bar — less distraction while riding
+    // Hide style bar and route picker — less distraction while riding
     document.getElementById('mapStyleBar').style.display = 'none';
+    hideMapRoutePicker();
 
     // Close any open modals
     closeRouteModal();
@@ -3988,29 +3972,28 @@ async function planRoute() {
         document.getElementById('trafficLegend').style.display = 'block';
         document.getElementById('routeKey').style.display = 'block';
 
+        // Close modal — routes are now on the map for the rider to tap
+        closeRouteModal();
+
+        // Show floating route selector overlay on map
+        showMapRoutePicker();
+
         // Start traffic refresh every 2 minutes
         clearInterval(trafficRefreshTimer);
         trafficRefreshTimer = setInterval(() => refreshTraffic(start, end), 120000);
 
-        // Fetch HERE and Google in parallel if needed
-        if (activeRouteSource === 'here' || activeRouteSource === 'compare') {
-            fetchHERERoute(start, end).then(here => {
-                if (here) {
-                    document.getElementById('statHereTime').textContent     = here.timeStr;
-                    document.getElementById('statHereIncidents').textContent = here.incidents;
-                    document.getElementById('rowHereTime').style.display     = 'flex';
-                    document.getElementById('rowHereIncidents').style.display = 'flex';
-                }
-            });
-        }
-        if (activeRouteSource === 'google' || activeRouteSource === 'compare') {
-            fetchGoogleRoute(start, end).then(google => {
-                if (google) {
-                    document.getElementById('statGoogleTime').textContent = google.timeStr;
-                    document.getElementById('rowGoogleTime').style.display = 'flex';
-                }
-            });
-        }
+        // Always fetch HERE and Google in background for best-route comparison
+        fetchHERERoute(start, end).then(here => {
+            if (here) {
+                document.getElementById('statHereTime').textContent      = here.timeStr;
+                document.getElementById('statHereIncidents').textContent = here.incidents;
+            }
+        });
+        fetchGoogleRoute(start, end).then(google => {
+            if (google) {
+                document.getElementById('statGoogleTime').textContent = google.timeStr;
+            }
+        });
 
     } catch(e) {
         document.getElementById('routeErrorMsg').textContent = 'Network error — check your connection.';
@@ -4144,6 +4127,7 @@ function clearRoute() {
     clearInterval(trafficRefreshTimer);
     document.getElementById('trafficLegend').style.display = 'none';
     document.getElementById('routeKey').style.display = 'none';
+    hideMapRoutePicker();
     endCoords = null;
     document.getElementById('routeBanner').classList.remove('visible');
     document.getElementById('routeBtn').classList.remove('active');
@@ -4160,6 +4144,52 @@ function openRouteModal()  {
     syncSkillToRouteOptions();
 }
 function closeRouteModal() { document.getElementById('routeOverlay').classList.add('hidden'); }
+
+function showMapRoutePicker() {
+    const picker = document.getElementById('routePicker');
+    const cards  = document.getElementById('routePickerCards');
+    if (!picker || !cards) return;
+
+    const routeDefs = [
+        { idx: 0, color: '#ef4444', icon: 'ti-bolt',         label: 'Fastest'       },
+        { idx: 1, color: '#2dd4bf', icon: 'ti-traffic-cone', label: 'Least traffic' },
+        { idx: 2, color: '#22c55e', icon: 'ti-mountain',     label: 'Most scenic'   },
+    ];
+
+    cards.innerHTML = '';
+    routeDefs.forEach(def => {
+        if (!allRoutes[def.idx]) return;
+        const route   = allRoutes[def.idx];
+        const distMi  = (route.distance / 1609.34).toFixed(1);
+        const mins    = Math.round(route.duration / 60);
+        const timeStr = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
+        const corners = estimateCorners(route.geometry.coordinates);
+        const isActive = def.idx === activeRouteIdx;
+
+        const card = document.createElement('div');
+        card.style.cssText = `display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;border:1px solid ${isActive ? def.color : 'var(--border)'};background:${isActive ? 'rgba(255,255,255,0.05)' : 'var(--surface)'};transition:all 0.15s;`;
+        card.innerHTML = `
+            <div style="width:10px;height:10px;border-radius:50%;background:${def.color};flex-shrink:0;box-shadow:0 0 6px ${def.color}66;"></div>
+            <i class="ti ${def.icon}" style="color:${def.color};font-size:14px;flex-shrink:0;"></i>
+            <div style="flex:1;">
+                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:${isActive ? def.color : 'var(--text)'};">${def.label}</div>
+                <div style="font-size:11px;color:var(--muted);">${timeStr} · ${distMi} mi · ${corners} corners</div>
+            </div>
+            ${isActive ? `<i class="ti ti-check" style="color:${def.color};font-size:16px;"></i>` : ''}`;
+        card.onclick = () => {
+            selectAltRoute(def.idx);
+            showMapRoutePicker(); // refresh to update active state
+        };
+        cards.appendChild(card);
+    });
+
+    picker.style.display = 'block';
+}
+
+function hideMapRoutePicker() {
+    const picker = document.getElementById('routePicker');
+    if (picker) picker.style.display = 'none';
+}
 
 function startNavigationFromModal() {
     // Close the route planning modal
