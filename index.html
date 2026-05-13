@@ -1209,8 +1209,7 @@ function reAddRouteLayers() {
                 paint: { 'line-color': cfg.color, 'line-width': 4, 'line-opacity': 0.25 } });
             map.addLayer({ id: cfg.id + '-active', type: 'line', source: cfg.id,
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': cfg.color, 'line-width': 6, 'line-opacity': 0.9 },
-                filter: ['==', ['get', 'active'], true] });
+                paint: { 'line-color': cfg.color, 'line-width': 0, 'line-opacity': 0 } });
             map.on('click', cfg.id + '-inactive', () => selectAltRouteBySourceId(cfg.id));
             map.on('mouseenter', cfg.id + '-inactive', () => { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', cfg.id + '-inactive', () => { map.getCanvas().style.cursor = ''; });
@@ -1350,8 +1349,23 @@ let liveSpeedOverride = false;
 let liveTelemetry     = false; // true when GPS is providing data
 let imuActive         = false; // true when DeviceOrientation is active
 let imuPermGranted    = false; // iOS permission granted
-let lastPos           = null;  // previous GPS position for speed fallback
 let lastPosTime       = null;  // timestamp for speed fallback calculation
+
+// Load last known location from localStorage
+const LAST_LOC_KEY = 'rideline_last_location';
+function loadLastKnownLocation() {
+    try {
+        const saved = localStorage.getItem(LAST_LOC_KEY);
+        if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return null;
+}
+function saveLastKnownLocation(lat, lng) {
+    try {
+        localStorage.setItem(LAST_LOC_KEY, JSON.stringify({ lat, lng, time: Date.now() }));
+    } catch(e) {}
+}
+let lastPos = loadLastKnownLocation(); // init from localStorage if available
 let currentLeanDeg    = 0;     // live lean angle from IMU
 let currentPitchDeg   = 0;     // forward/back pitch from IMU
 let imuBeta           = 0;     // raw device beta (front-back tilt)
@@ -1576,6 +1590,49 @@ function applyResult(r, speedMph, leanDeg, curve) {
 /* ═══════════════════════════════════════════════
    MAPBOX INIT
 ═══════════════════════════════════════════════ */
+async function getStartPosition() {
+    // Try quick GPS fix first
+    if (navigator.geolocation) {
+        try {
+            const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    timeout: 1500,
+                    maximumAge: 30000,      // accept cached position up to 30s old
+                    enableHighAccuracy: false // low accuracy is fine for initial centre
+                });
+            });
+            return {
+                coords: [pos.coords.longitude, pos.coords.latitude],
+                zoom: 14,
+                source: 'gps'
+            };
+        } catch(e) {
+            // GPS timed out or denied — fall through
+        }
+    }
+
+    // Fall back to last known location
+    const saved = loadLastKnownLocation();
+    if (saved) {
+        const ageHours = (Date.now() - saved.time) / 3600000;
+        // Only use if less than 24 hours old
+        if (ageHours < 24) {
+            return {
+                coords: [saved.lng, saved.lat],
+                zoom: 13,
+                source: 'last_known'
+            };
+        }
+    }
+
+    // Final fallback — UK centre
+    return {
+        coords: [-2.72, 53.1],
+        zoom: 6,  // zoom out so UK is visible rather than a specific town
+        source: 'default'
+    };
+}
+
 function initMap(providedKey) {
     const key = providedKey ||
                 document.getElementById('mbKeyInput').value.trim() ||
@@ -1599,31 +1656,43 @@ function initMap(providedKey) {
 
     try {
         document.getElementById('mapGrid').style.display = 'none';
+        // Determine correct style BEFORE creating the map — prevents flash
+        const initialStyle = !manualThemeOverride ? MAP_STYLES[getAutoStyle()] : MAP_STYLES[currentMapStyle] || MAP_STYLES.dark;
+        currentMapStyle    = !manualThemeOverride ? getAutoStyle() : currentMapStyle;
+
+        // Determine start position:
+        // 1. Try a quick GPS fix (1.5s timeout)
+        // 2. Fall back to last known location from localStorage
+        // 3. Fall back to UK centre
+        const startCenter = await getStartPosition();
+
         map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/dark-v11',
-            center: [-2.72, 53.1],
-            zoom: 13,
+            style: initialStyle,
+            center: startCenter.coords,
+            zoom:   startCenter.zoom,
             pitch: 30,
             attributionControl: false,
         });
         map.addControl(new mapboxgl.AttributionControl({ compact: true }));
 
-        map.on('load', () => {
-            // Apply auto day/night theme on first map load
-            setTimeout(() => {
-                if (!manualThemeOverride) {
-                    const autoStyle = getAutoStyle();
-                    if (autoStyle !== 'dark') {
-                        // setMapStyle with isAuto=true so it doesn't set override
-                        setMapStyle(autoStyle, true);
-                    }
-                }
-                // Mark auto button active if auto is on
-                const autoBtn = document.getElementById('styleBtn-auto');
-                if (autoBtn && autoThemeEnabled) autoBtn.classList.add('active');
-            }, 500);
+        // Apply bright HUD classes immediately if starting in bright mode
+        if (currentMapStyle === 'bright') {
+            const huds = document.querySelectorAll('.hud-speed, .hud-alert, .hud-pos, .hud-compass, .corner-panel, .route-banner');
+            huds.forEach(el => el.classList.add('bright-hud'));
+        }
 
+        map.on('load', () => {
+            // Mark auto button active if auto is on (no style swap needed — correct style already loaded)
+            const autoBtn = document.getElementById('styleBtn-auto');
+            if (autoBtn && autoThemeEnabled) autoBtn.classList.add('active');
+            // Update style button to reflect initial style
+            document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+            const initBtn = document.getElementById('styleBtn-' + currentMapStyle);
+            if (initBtn) initBtn.classList.add('active');
+            if (autoThemeEnabled && autoBtn) autoBtn.classList.add('active');
+
+            // Ensure all route layers are set up (works regardless of initial style)
             // Route config: inactive routes drawn dimly, active route drawn boldly
             const routeConfigs = [
                 { id: 'route-0', color: '#ef4444', label: 'fastest'      },  // red    — fastest
@@ -1640,13 +1709,12 @@ function initMap(providedKey) {
                     layout: { 'line-join': 'round', 'line-cap': 'round' },
                     paint: { 'line-color': cfg.color, 'line-width': 4, 'line-opacity': 0.25 }
                 });
-                // Active layer — bold
+                // Active layer — bold, controlled by opacity/width not filter
                 map.addLayer({
                     id: cfg.id + '-active',
                     type: 'line', source: cfg.id,
                     layout: { 'line-join': 'round', 'line-cap': 'round' },
-                    paint: { 'line-color': cfg.color, 'line-width': 6, 'line-opacity': 0.9 },
-                    filter: ['==', ['get', 'active'], true]
+                    paint: { 'line-color': cfg.color, 'line-width': 0, 'line-opacity': 0 }
                 });
                 // Click handler — clicking any route selects it
                 map.on('click', cfg.id + '-inactive', () => {
@@ -1700,6 +1768,7 @@ function onPosition(pos) {
     }
     lastPos     = { lat, lng };
     lastPosTime = now;
+    saveLastKnownLocation(lat, lng); // persist for next app start
 
     // Fetch weather if first position or moved >2km since last fetch
     if (!lastWeatherFetchPos ||
@@ -1747,7 +1816,8 @@ function onPosition(pos) {
             style: 'width:16px;height:16px;background:#3b82f6;border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(59,130,246,0.7)'
         });
         userMarker = new mapboxgl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
-        map.flyTo({ center: [lng, lat], zoom: otsMode ? 17 : 15 });
+        // Fly to exact GPS position on first fix
+        map.flyTo({ center: [lng, lat], zoom: otsMode ? 17 : 14, duration: 1500 });
         startCoords = [lng, lat];
     } else {
         userMarker.setLngLat([lng, lat]);
