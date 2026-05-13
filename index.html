@@ -241,6 +241,9 @@
             <button class="icon-btn" id="imuBtn" title="Enable motion sensors" onclick="setupIMU()" style="border-color:rgba(45,212,191,0.3);color:#2dd4bf;">
                 <i class="ti ti-device-mobile-rotated"></i>
             </button>
+            <button class="icon-btn" id="lightBtn" title="Enable tunnel detection" onclick="setupLightSensor()" style="border-color:rgba(234,179,8,0.3);color:#eab308;">
+                <i class="ti ti-bulb"></i>
+            </button>
             <button class="icon-btn" title="Map token" onclick="openKeyModal()">
                 <i class="ti ti-map-pin"></i>
             </button>
@@ -346,6 +349,10 @@
                 <i class="ti ti-sun"></i>
                 <span>Bright</span>
             </button>
+            <button class="style-btn" id="styleBtn-auto" onclick="toggleAutoTheme()" title="Auto day/night theme">
+                <i class="ti ti-clock" id="autoThemeIcon"></i>
+                <span>Auto</span>
+            </button>
         </div>
 
         <!-- Route key -->
@@ -404,7 +411,8 @@
 
     <!-- End Navigation bar — shown above demo strip during active nav -->
     <div id="endNavBar" style="display:none;background:rgba(10,12,15,0.97);border-top:1px solid rgba(239,68,68,0.3);padding:8px 16px;flex-shrink:0;z-index:20;">
-        <button onclick="endNavigation()" style="width:100%;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:11px;color:#ef4444;font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;">
+        <button onclick="endNavigation()" style="width:100%;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:13px;color:#ef4444;font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;"
+            onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.12)'">
             <i class="ti ti-navigation-off" aria-hidden="true"></i> End navigation
         </button>
     </div>
@@ -749,7 +757,12 @@
         <!-- Alternative routes selector -->
         <div id="altRoutesContainer" style="display:none;margin-bottom:12px;">
             <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px;">Alternative routes — tap to select</div>
-            <div id="altRoutesList" style="display:flex;flex-direction:column;gap:6px;"></div>
+            <div id="altRoutesList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+            <!-- Start Navigation button — appears once routes are loaded -->
+            <button id="btnStartNavModal" onclick="startNavigationFromModal()"
+                style="width:100%;background:var(--accent);border:none;border-radius:12px;padding:13px;color:#fff;font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity 0.15s;box-shadow:0 4px 16px rgba(59,130,246,0.35);">
+                <i class="ti ti-navigation" aria-hidden="true"></i> Start navigation
+            </button>
         </div>
 
         <div class="route-stats" id="routeStats">
@@ -875,7 +888,238 @@ let expertUnlocked = false;
 let map          = null;
 let userMarker   = null;
 let compassDeg   = 0;
-let currentMapStyle = 'dark';
+let currentMapStyle    = 'dark';
+let autoThemeEnabled   = true;    // true = auto switch day/night
+let manualThemeOverride = false;  // true = user has manually chosen a style
+let autoThemeTimer     = null;    // interval for checking time
+
+// ── LIGHT SENSOR STATE ──
+let lightSensor          = null;   // AmbientLightSensor instance (if available)
+let lightSensorActive    = false;
+let lastLuxReading       = null;   // most recent lux value
+let luxHistory           = [];     // rolling 5-reading buffer for smoothing
+let tunnelMode           = false;  // true = currently in tunnel/very dark
+let tunnelEntryTime      = null;   // when we entered darkness
+let lightCheckCanvas     = null;   // offscreen canvas for camera fallback
+let lightCheckVideo      = null;   // video element for camera fallback
+let lightCheckTimer      = null;   // interval for camera-based checks
+
+// Lux thresholds — tuned for lit tunnel detection
+// UK road tunnels: 50-150 lux (sodium/LED lit)
+// Street lights (night): 10-50 lux
+// Overcast day: 1,000-5,000 lux
+// Bright day: 10,000-100,000 lux
+// Strategy: detect RAPID DROP from daylight levels rather than absolute darkness
+// A tunnel during the day causes lux to drop from thousands to hundreds in under 2 seconds
+// Street lights at night don't cause this because baseline is already low
+const LUX_TUNNEL_THRESHOLD    = 200;  // below = potential tunnel (lit tunnel lighting level)
+const LUX_TUNNEL_EXIT          = 500;  // above = exited tunnel / back in daylight
+const LUX_DROP_RATIO           = 0.15; // lux dropped to <15% of recent average = rapid drop
+const LUX_DAY_BASELINE         = 1000; // only apply drop detection if recently above this
+const LUX_CONFIRM_READINGS     = 4;    // must get N consecutive sub-threshold readings
+const TUNNEL_CONFIRM_MS        = 2000; // must be dark for 2s to trigger
+let   darkReadingCount         = 0;    // consecutive dark readings counter
+let   luxDayBaseline           = null; // rolling peak lux for drop detection
+
+// Sunrise/sunset approx by latitude (simplified)
+// For UK: sunrise ~6am summer / 8am winter, sunset ~9pm summer / 4pm winter
+// We use a simple hour-based check; can be refined with actual sun position
+function isDaytime() {
+    const now  = new Date();
+    const hour = now.getHours();
+    const month = now.getMonth(); // 0-11
+    // Summer (Apr-Sep): day 6am-9pm, Winter (Oct-Mar): day 8am-4:30pm
+    const isSummer = month >= 3 && month <= 8;
+    const sunriseHour = isSummer ? 6  : 8;
+    const sunsetHour  = isSummer ? 21 : 16;
+    return hour >= sunriseHour && hour < sunsetHour;
+}
+
+function getAutoStyle() {
+    if (navActive || otsMode) return 'ots';
+    return isDaytime() ? 'bright' : 'dark';
+}
+
+function applyAutoTheme(force = false) {
+    if (!autoThemeEnabled || (manualThemeOverride && !force)) return;
+    const style = getAutoStyle();
+    if (style !== currentMapStyle) {
+        setMapStyle(style);
+    }
+}
+
+function toggleAutoTheme() {
+    autoThemeEnabled    = !autoThemeEnabled;
+    manualThemeOverride = !autoThemeEnabled; // if auto disabled, treat as manual
+    const btn  = document.getElementById('styleBtn-auto');
+    const icon = document.getElementById('autoThemeIcon');
+    if (autoThemeEnabled) {
+        btn.classList.add('active');
+        if (icon) icon.className = 'ti ti-clock';
+        applyAutoTheme(true); // force apply
+    } else {
+        btn.classList.remove('active');
+        if (icon) icon.className = 'ti ti-clock-off';
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   AMBIENT LIGHT SENSOR
+   Strategy 1: AmbientLightSensor API (Chrome Android with flag)
+   Strategy 2: Camera luminance via getUserMedia (works everywhere)
+   Strategy 3: Time-based fallback
+   Tunnel detection uses very conservative thresholds to avoid
+   false triggers under street lights (10-50 lux vs tunnel <8 lux)
+═══════════════════════════════════════════════ */
+
+async function setupLightSensor() {
+    // Strategy 1 — AmbientLightSensor API
+    if ('AmbientLightSensor' in window) {
+        try {
+            // Requires 'ambient-light-sensor' permission on some platforms
+            if (navigator.permissions) {
+                const perm = await navigator.permissions.query({ name: 'ambient-light-sensor' }).catch(() => ({ state: 'granted' }));
+                if (perm.state === 'denied') throw new Error('Permission denied');
+            }
+            lightSensor = new AmbientLightSensor({ frequency: 2 }); // 2 readings/sec
+            lightSensor.addEventListener('reading', () => onLuxReading(lightSensor.illuminance));
+            lightSensor.addEventListener('error', () => setupCameraLightFallback());
+            lightSensor.start();
+            lightSensorActive = true;
+            console.log('AmbientLightSensor active');
+            return;
+        } catch(e) {
+            console.log('AmbientLightSensor unavailable, trying camera fallback');
+        }
+    }
+    // Strategy 2 — Camera luminance
+    await setupCameraLightFallback();
+}
+
+async function setupCameraLightFallback() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: 32, height: 32 }  // front camera — rear often covered by mount
+        });
+        lightCheckVideo  = document.createElement('video');
+        lightCheckCanvas = document.createElement('canvas');
+        lightCheckCanvas.width  = 32;
+        lightCheckCanvas.height = 32;
+        lightCheckVideo.srcObject = stream;
+        lightCheckVideo.autoplay  = true;
+        lightCheckVideo.playsInline = true;
+        lightCheckVideo.play();
+
+        // Sample every 1 second
+        lightCheckTimer = setInterval(() => {
+            if (!lightCheckVideo || lightCheckVideo.readyState < 2) return;
+            const ctx = lightCheckCanvas.getContext('2d');
+            ctx.drawImage(lightCheckVideo, 0, 0, 32, 32);
+            const data  = ctx.getImageData(0, 0, 32, 32).data;
+            // Calculate average luminance from all pixels
+            let total = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                // Perceived luminance formula
+                total += 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+            }
+            const avgBrightness = total / (data.length / 4); // 0-255
+            // Approximate lux from brightness (very rough — good enough for tunnel detection)
+            // Camera brightness 0-255 maps roughly to 0-100,000 lux on a log scale
+            // At brightness <15 (~0-5 lux equiv) we treat as tunnel
+            const approxLux = Math.pow(avgBrightness / 255, 2.5) * 10000;
+            onLuxReading(approxLux, true);
+        }, 1000);
+
+        lightSensorActive = true;
+        markLightSensorActive();
+        console.log('Camera light fallback active');
+    } catch(e) {
+        console.log('Camera fallback unavailable — time-based theme only');
+    }
+}
+
+function onLuxReading(lux, fromCamera = false) {
+    lastLuxReading = lux;
+
+    // Smooth readings — rolling average of last 5
+    luxHistory.push(lux);
+    if (luxHistory.length > 5) luxHistory.shift();
+    const avgLux = luxHistory.reduce((a, b) => a + b, 0) / luxHistory.length;
+
+    // Track peak daytime baseline (highest lux in last 20 readings)
+    // This is what we compare against for drop-rate detection
+    if (lux > (luxDayBaseline || 0)) luxDayBaseline = lux;
+
+    if (!manualThemeOverride) {
+        // ── TUNNEL DETECTION — two complementary methods ──
+
+        // Method A: Absolute threshold (works at night — tunnels still brighter than darkness)
+        const absolutelyDark = avgLux < LUX_TUNNEL_THRESHOLD;
+
+        // Method B: Rapid drop from high baseline (works during daytime)
+        // Only triggers if we recently had bright daylight AND lux has collapsed
+        const hadDaylight    = luxDayBaseline !== null && luxDayBaseline > LUX_DAY_BASELINE;
+        const rapidDrop      = hadDaylight && avgLux < (luxDayBaseline * LUX_DROP_RATIO);
+
+        const inTunnelCondition = absolutelyDark || rapidDrop;
+
+        if (inTunnelCondition) {
+            darkReadingCount++;
+            if (!tunnelMode && darkReadingCount >= LUX_CONFIRM_READINGS) {
+                tunnelMode      = true;
+                tunnelEntryTime = Date.now();
+                if (currentMapStyle !== 'dark' && currentMapStyle !== 'ots') {
+                    setMapStyle('dark', true);
+                    showLightNotice('Tunnel detected — switching to dark map');
+                }
+            }
+        } else if (avgLux > LUX_TUNNEL_EXIT || (!hadDaylight && avgLux > LUX_TUNNEL_THRESHOLD * 3)) {
+            // Exited tunnel — either back in daylight or consistently brighter than tunnel level
+            darkReadingCount = 0;
+            // Decay baseline slowly so it resets after exiting tunnel
+            if (luxDayBaseline && avgLux > LUX_TUNNEL_EXIT) {
+                luxDayBaseline = avgLux; // reset to current brightness
+            }
+            if (tunnelMode) {
+                tunnelMode = false;
+                const returnStyle = isDaytime() ? 'bright' : 'dark';
+                if (currentMapStyle !== returnStyle) {
+                    setMapStyle(returnStyle, true);
+                    showLightNotice('Tunnel exit — ' + (isDaytime() ? 'daylight mode restored' : 'night mode'));
+                }
+            }
+        } else {
+            // Ambiguous range — street lights at night, or tunnel lighting
+            // Decay dark count slowly to avoid triggering on brief shadows
+            darkReadingCount = Math.max(0, darkReadingCount - 1);
+        }
+    }
+}
+
+function showLightNotice(msg) {
+    const bar = document.getElementById('sensorWarnBar');
+    const txt = document.getElementById('sensorWarnMsg');
+    if (!bar || !txt) return;
+    txt.textContent = msg;
+    bar.style.background = 'rgba(59,130,246,0.1)';
+    bar.style.borderColor = 'rgba(59,130,246,0.3)';
+    bar.style.color       = 'var(--accent)';
+    bar.style.display     = 'flex';
+    setTimeout(() => {
+        bar.style.display = 'none';
+        bar.style.background = '';
+        bar.style.borderColor = '';
+        bar.style.color = '';
+    }, 4000);
+}
+
+function startAutoThemeTimer() {
+    clearInterval(autoThemeTimer);
+    // Check every 5 minutes
+    autoThemeTimer = setInterval(() => {
+        if (!manualThemeOverride) applyAutoTheme();
+    }, 300000);
+}
 let mapStylesLoaded = false;
 
 const MAP_STYLES = {
@@ -885,8 +1129,19 @@ const MAP_STYLES = {
     ots:       'mapbox://styles/mapbox/dark-v11',      // same tiles, different camera
 };
 
-function setMapStyle(style) {
+function setMapStyle(style, isAuto = false) {
     if (!map) return;
+
+    // Track whether this was a manual selection
+    if (!isAuto) {
+        manualThemeOverride = true;
+        // Reset override after 2 hours so auto-theme resumes
+        clearTimeout(setMapStyle._overrideTimer);
+        setMapStyle._overrideTimer = setTimeout(() => {
+            manualThemeOverride = false;
+            applyAutoTheme();
+        }, 7200000);
+    }
 
     // Update button states
     document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
@@ -1355,6 +1610,20 @@ function initMap(providedKey) {
         map.addControl(new mapboxgl.AttributionControl({ compact: true }));
 
         map.on('load', () => {
+            // Apply auto day/night theme on first map load
+            setTimeout(() => {
+                if (!manualThemeOverride) {
+                    const autoStyle = getAutoStyle();
+                    if (autoStyle !== 'dark') {
+                        // setMapStyle with isAuto=true so it doesn't set override
+                        setMapStyle(autoStyle, true);
+                    }
+                }
+                // Mark auto button active if auto is on
+                const autoBtn = document.getElementById('styleBtn-auto');
+                if (autoBtn && autoThemeEnabled) autoBtn.classList.add('active');
+            }, 500);
+
             // Route config: inactive routes drawn dimly, active route drawn boldly
             const routeConfigs = [
                 { id: 'route-0', color: '#ef4444', label: 'fastest'      },  // red    — fastest
@@ -1483,16 +1752,23 @@ function onPosition(pos) {
     } else {
         userMarker.setLngLat([lng, lat]);
         if (otsMode || navActive) {
-            // OTS / active navigation: follow rider with high pitch locked to heading
+            // OTS / active navigation: smooth Google Maps-style follow
+            // Use lower duration for snappy updates, higher zoom for street level
             map.easeTo({
                 center:   [lng, lat],
-                bearing:  heading || compassDeg,
+                bearing:  heading !== null ? heading : compassDeg,
                 pitch:    65,
                 zoom:     17,
-                duration: 300,
+                duration: 500,
+                easing:   t => t,  // linear for smooth continuous motion
             });
         } else {
-            map.easeTo({ center: [lng, lat], bearing: heading || 0, pitch: 30 });
+            map.easeTo({
+                center:  [lng, lat],
+                bearing: heading || 0,
+                pitch:   30,
+                duration: 400,
+            });
         }
         startCoords = [lng, lat];
     }
@@ -2136,48 +2412,112 @@ function haversineKm([lng1, lat1], [lng2, lat2]) {
 function startNavigation() {
     if (!allRoutes.length) return;
     navActive   = true;
+    otsMode     = true;
     navRouteIdx = activeRouteIdx;
 
-    // Hide route banner start button, show end nav bar
-    document.getElementById('btnStartNav').style.display   = 'none';
-    document.getElementById('endNavBar').style.display     = 'flex';
+    // Show end nav bar, hide route banner start button
+    document.getElementById('btnStartNav').style.display = 'none';
+    document.getElementById('endNavBar').style.display   = 'flex';
 
-    // Alert HUD stays at top — cornering advice remains visible during nav
-
-    // Switch to OTS ride view automatically
-    setMapStyle('ots');
-
-    // Hide style bar during navigation — less distraction
+    // Hide style bar — less distraction while riding
     document.getElementById('mapStyleBar').style.display = 'none';
 
     // Close any open modals
     closeRouteModal();
 
-    console.log('Navigation started on route', navRouteIdx);
+    // Update style button state
+    document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+    const otsBtn = document.getElementById('styleBtn-ots');
+    if (otsBtn) otsBtn.classList.add('active');
+
+    // Enter OTS mode — if map style is already dark, just apply camera directly
+    // Otherwise swap to dark style first then apply camera
+    if (!map) return;
+
+    const applyNav = () => {
+        // Activate OTS camera immediately
+        map.easeTo({
+            pitch:    65,
+            zoom:     17,
+            bearing:  compassDeg,
+            duration: 800,
+        });
+        // If we have GPS position, centre on rider
+        if (lastPos) {
+            map.easeTo({
+                center:   [lastPos.lng, lastPos.lat],
+                pitch:    65,
+                zoom:     17,
+                bearing:  compassDeg,
+                duration: 800,
+            });
+        }
+        // Re-add route layers in case style just changed
+        reAddRouteLayers();
+    };
+
+    // Check if current style is already dark — avoid unnecessary reload
+    const currentStyle = map.getStyle();
+    const isDark = currentStyle?.name?.toLowerCase().includes('dark') || currentMapStyle === 'dark' || currentMapStyle === 'ots';
+
+    if (isDark) {
+        applyNav();
+    } else {
+        // Switch to dark first then apply OTS camera
+        map.setStyle(MAP_STYLES.dark);
+        map.once('style.load', () => {
+            reAddRouteLayers();
+            applyNav();
+        });
+    }
+    currentMapStyle = 'ots';
 }
 
 function endNavigation() {
     navActive = false;
     otsMode   = false;
+    currentMapStyle = 'dark';
 
     // Show banner start button again, hide end nav bar
     document.getElementById('btnStartNav').style.display = '';
     document.getElementById('endNavBar').style.display   = 'none';
 
-
-
-    // Return to bird's eye dark view
-    setMapStyle('dark');
-
     // Restore style bar
     document.getElementById('mapStyleBar').style.display = '';
 
-    // Ease camera back to birds eye
+    // Update style button state
+    document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+    const darkBtn = document.getElementById('styleBtn-dark');
+    if (darkBtn) darkBtn.classList.add('active');
+
+    // Smooth return to birds-eye view
     if (map) {
-        map.easeTo({ pitch: 0, bearing: 0, zoom: 13, duration: 800 });
+        map.easeTo({
+            pitch:    0,
+            bearing:  0,
+            zoom:     13,
+            duration: 1000,
+        });
+        // Return to auto theme style (day/night appropriate)
+        setTimeout(() => {
+            if (!manualThemeOverride) {
+                const returnStyle = isDaytime() ? 'bright' : 'dark';
+                setMapStyle(returnStyle, true);
+            }
+        }, 1200);
     }
 
-    console.log('Navigation ended');
+    // Show pollen + AQI banner after 4 seconds
+    setTimeout(() => {
+        if (lastPos) {
+            pollenShownOnStart = false;
+            isStationary = true;
+            Promise.all([
+                fetchPollenAndSun(lastPos.lat, lastPos.lng),
+                fetchAirQuality(lastPos.lat, lastPos.lng)
+            ]);
+        }
+    }, 4000);
 }
 
 /* ═══════════════════════════════════════════════
@@ -2267,12 +2607,21 @@ function showSensorWarning(msg) {
 
 function dismissIMUDisclaimer() {
     document.getElementById('imuDisclaimerOverlay').classList.add('hidden');
-    // Mark IMU button as active
     const btn = document.getElementById('imuBtn');
     if (btn) {
-        btn.style.background = 'rgba(45,212,191,0.15)';
+        btn.style.background  = 'rgba(45,212,191,0.15)';
         btn.style.borderColor = '#2dd4bf';
         btn.title = 'Motion sensors active';
+    }
+}
+
+function markLightSensorActive() {
+    const btn = document.getElementById('lightBtn');
+    if (btn) {
+        btn.style.background  = 'rgba(234,179,8,0.15)';
+        btn.style.borderColor = '#eab308';
+        btn.title = 'Tunnel detection active';
+        btn.querySelector('i').className = 'ti ti-bulb-filled';
     }
 }
 
@@ -3742,6 +4091,13 @@ function openRouteModal()  {
     syncSkillToRouteOptions();
 }
 function closeRouteModal() { document.getElementById('routeOverlay').classList.add('hidden'); }
+
+function startNavigationFromModal() {
+    // Close the route planning modal
+    closeRouteModal();
+    // Small delay so modal close animation finishes before nav starts
+    setTimeout(() => startNavigation(), 200);
+}
 
 function openKeyModal() {
     const saved = localStorage.getItem('mapbox_token');
