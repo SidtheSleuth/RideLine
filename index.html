@@ -146,6 +146,12 @@
         .key-input input:focus { border-color: var(--accent); }
         .key-input input::placeholder { color: var(--muted); }
         .warning-box { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #f87171; margin-bottom: 16px; line-height: 1.5; }
+        /* RALLY CARD */
+        @keyframes rallyFadeIn  { from { opacity:0; transform:translate(-50%,-50%) scale(0.88); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+        @keyframes rallyFadeOut { from { opacity:1; } to { opacity:0; } }
+        #rallyCard.entering { animation: rallyFadeIn 0.25s ease forwards; }
+        #rallyCard.exiting  { animation: rallyFadeOut 0.3s ease forwards; }
+
         /* MAP STYLE SWITCHER */
         .map-style-bar { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:10; }
         .style-btn { display:flex;flex-direction:column;align-items:center;gap:3px; padding:6px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:rgba(10,12,15,0.88); color:rgba(255,255,255,0.5); cursor:pointer; font-size:10px; text-transform:uppercase; letter-spacing:0.05em; font-family:var(--font-b); font-weight:500; transition:all 0.15s; backdrop-filter:blur(4px); }
@@ -318,6 +324,9 @@
             <i class="ti ti-alert-triangle"></i>
             <span id="sensorWarnMsg"></span>
         </div>
+
+        <!-- Rally card overlay — appears in front of map for corners/junctions/roundabouts -->
+        <div id="rallyCard" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:50;pointer-events:none;"></div>
 
         <!-- Map style switcher -->
         <div class="map-style-bar" id="mapStyleBar">
@@ -961,6 +970,7 @@ function reAddRouteLayers() {
     if (!map.getSource('route')) {
         map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
+    // Rally card doesn't need a map source — it's a DOM overlay
     if (!map.getSource('lookahead')) {
         map.addSource('lookahead', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
         map.addLayer({ id: lookaheadLayer, type: 'line', source: 'lookahead',
@@ -1445,9 +1455,10 @@ function onPosition(pos) {
     // Update stationary state — gates pollen/sun banners
     updateStationaryState(speedMph);
 
-    // Run road lookahead when GPS is active and not in nav mode
-    if (speedMph >= LOOKAHEAD_MIN_SPEED && !navActive) {
-        runLookahead(lat, lng, heading, speedMph);
+    // Run road lookahead and feature detection when GPS is active
+    if (speedMph >= LOOKAHEAD_MIN_SPEED) {
+        if (!navActive) runLookahead(lat, lng, heading, speedMph);
+        detectRoadFeatures(lat, lng, heading, speedMph);
     } else if (speedMph < LOOKAHEAD_MIN_SPEED && lookaheadCurve) {
         // Clear lookahead when stopped
         lookaheadCurve = null;
@@ -2695,6 +2706,330 @@ async function fetchAirQuality(lat, lng) {
         }
 
     } catch(e) { console.warn('Air quality fetch failed:', e.message); }
+}
+
+/* ═══════════════════════════════════════════════
+   ROAD FEATURE DETECTION
+   Uses OSM Overpass (roundabouts/junctions) +
+   Google Roads API (snap + cross-check) to
+   identify what's ahead and type it correctly.
+═══════════════════════════════════════════════ */
+
+let lastFeatureFetchPos  = null;
+let currentRoadFeature   = null; // { type, distanceMetres, direction, exits, speedLimit }
+let rallyCardTimer       = null;
+let featureFetchTimer    = null;
+const FEATURE_FETCH_DIST = 0.05;  // km — refetch if moved 50m
+const RALLY_CARD_LOOKAHEAD_M = 400; // metres ahead to query
+
+async function detectRoadFeatures(lat, lng, heading, speedMph) {
+    if (speedMph < 5) return;
+    // Debounce
+    if (featureFetchTimer) return;
+    featureFetchTimer = setTimeout(() => { featureFetchTimer = null; }, 4000);
+
+    const token  = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+    const gKey   = GOOGLE_API_KEY;
+
+    try {
+        // ── Calculate point 400m ahead in current heading ──
+        const ahead = destinationPoint(lat, lng, heading || compassDeg, RALLY_CARD_LOOKAHEAD_M);
+
+        // ── OSM Overpass — query roundabouts and junctions in corridor ──
+        const bbox = `${Math.min(lat, ahead.lat) - 0.003},${Math.min(lng, ahead.lng) - 0.003},${Math.max(lat, ahead.lat) + 0.003},${Math.max(lng, ahead.lng) + 0.003}`;
+
+        const overpassQuery = `[out:json][timeout:8];
+(
+  way[junction=roundabout](${bbox});
+  node[highway=mini_roundabout](${bbox});
+  node[highway=traffic_signals](${bbox});
+  node[highway=give_way](${bbox});
+  node[highway=stop](${bbox});
+);
+out geom;`;
+
+        const [overpassRes, roadsRes] = await Promise.all([
+            fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: 'data=' + encodeURIComponent(overpassQuery),
+            }),
+            gKey && gKey !== 'your_google_key_here'
+                ? fetch(`https://roads.googleapis.com/v1/snapToRoads?path=${lat},${lng}|${ahead.lat},${ahead.lng}&interpolate=true&key=${gKey}`)
+                : Promise.resolve(null)
+        ]);
+
+        const overpassData = await overpassRes.json();
+        const roadsData    = roadsRes ? await roadsRes.json() : null;
+
+        // ── Parse OSM features ──
+        const features = [];
+
+        (overpassData.elements || []).forEach(el => {
+            let type = null, featureLat, featureLng;
+
+            if (el.type === 'way' && el.tags?.junction === 'roundabout') {
+                type = 'roundabout';
+                // Use centroid of first few nodes
+                const nodes = el.geometry || [];
+                featureLat  = nodes.reduce((s, n) => s + n.lat, 0) / (nodes.length || 1);
+                featureLng  = nodes.reduce((s, n) => s + n.lon, 0) / (nodes.length || 1);
+                // Count exit roads (connections to the roundabout)
+            } else if (el.type === 'node') {
+                featureLat = el.lat;
+                featureLng = el.lon;
+                if (el.tags?.highway === 'mini_roundabout')   type = 'mini_roundabout';
+                if (el.tags?.highway === 'traffic_signals')   type = 'traffic_signals';
+                if (el.tags?.highway === 'give_way')          type = 'give_way';
+                if (el.tags?.highway === 'stop')              type = 'stop_sign';
+            }
+
+            if (type && featureLat && featureLng) {
+                const distM = haversineKm([lng, lat], [featureLng, featureLat]) * 1000;
+                // Only include features ahead of rider (within 400m)
+                if (distM < RALLY_CARD_LOOKAHEAD_M && distM > 10) {
+                    const brg = bearing([lng, lat], [featureLng, featureLat]);
+                    // Check it's roughly in our heading (within 60 degrees)
+                    let headingDiff = Math.abs((brg - (heading || compassDeg) + 360) % 360);
+                    if (headingDiff > 180) headingDiff = 360 - headingDiff;
+                    if (headingDiff < 60) {
+                        features.push({ type, distM, lat: featureLat, lng: featureLng });
+                    }
+                }
+            }
+        });
+
+        // Sort by distance — closest first
+        features.sort((a, b) => a.distM - b.distM);
+
+        // ── Get speed limit from Google Roads if available ──
+        let speedLimit = null;
+        if (roadsData?.snappedPoints?.length > 0) {
+            const placeId = roadsData.snappedPoints[Math.floor(roadsData.snappedPoints.length / 2)].placeId;
+            if (placeId && gKey) {
+                try {
+                    const slRes  = await fetch(`https://roads.googleapis.com/v1/speedLimits?placeId=${placeId}&key=${gKey}`);
+                    const slData = await slRes.json();
+                    speedLimit   = slData.speedLimits?.[0]?.speedLimit ?? null; // km/h
+                    if (speedLimit) speedLimit = Math.round(speedLimit * 0.621); // convert to mph
+                } catch(e) {}
+            }
+        }
+
+        // ── Select closest relevant feature ──
+        if (features.length > 0) {
+            const f = features[0];
+            currentRoadFeature = { ...f, speedLimit };
+            showRallyCard(f.type, f.distM, heading || compassDeg, speedLimit, lookaheadCurve);
+        } else if (lookaheadCurve) {
+            // No OSM junction/roundabout — show corner card from lookahead geometry
+            currentRoadFeature = { type: 'corner', ...lookaheadCurve, speedLimit };
+            showRallyCard('corner', lookaheadCurve.distanceMetres, lookaheadCurve.direction, speedLimit, lookaheadCurve);
+        } else {
+            hideRallyCard();
+        }
+
+    } catch(e) {
+        console.warn('Feature detection failed:', e.message);
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   RALLY CARD SVG GENERATOR
+═══════════════════════════════════════════════ */
+
+function showRallyCard(type, distM, direction, speedLimit, curve) {
+    const card = document.getElementById('rallyCard');
+    if (!card) return;
+
+    // Only show card when approaching — within 300m and moving
+    if (distM > 300) { hideRallyCard(); return; }
+
+    const urgency = distM < 80 ? 'imminent' : distM < 150 ? 'close' : 'approaching';
+    const svg     = buildRallyCardSVG(type, distM, direction, speedLimit, curve, urgency);
+
+    card.innerHTML = svg;
+    card.style.display = 'block';
+    card.className = 'entering';
+
+    // Auto-hide after feature is passed (estimate based on speed)
+    clearTimeout(rallyCardTimer);
+    const speedMph  = parseInt(document.getElementById('demoSpeed').value) || 30;
+    const timeToMs  = Math.max(3000, (distM / (speedMph * 0.447)) * 1000);
+    rallyCardTimer  = setTimeout(() => hideRallyCard(), timeToMs + 2000);
+}
+
+function hideRallyCard() {
+    const card = document.getElementById('rallyCard');
+    if (!card || card.style.display === 'none') return;
+    card.className = 'exiting';
+    setTimeout(() => { card.style.display = 'none'; card.className = ''; }, 300);
+    currentRoadFeature = null;
+}
+
+function buildRallyCardSVG(type, distM, direction, speedLimit, curve, urgency) {
+    const W = 220, H = 200;
+
+    // Colour scheme by urgency
+    const borderColor = urgency === 'imminent' ? '#ef4444'
+                      : urgency === 'close'    ? '#f97316'
+                      : '#3b82f6';
+    const bgAlpha     = urgency === 'imminent' ? '0.96' : '0.92';
+
+    // Distance text
+    const distText = distM < 100 ? Math.round(distM) + 'm'
+                   : distM < 1000 ? Math.round(distM / 10) * 10 + 'm'
+                   : (distM / 1000).toFixed(1) + 'km';
+
+    // Speed info
+    const recSpeed    = curve ? THRESHOLDS.corners[
+        curve.r_eff >= 60 ? 'gentle' : curve.r_eff >= 20 ? 'sharp' : 'hairpin'
+    ].recSpeedMph[userSkill] : null;
+    const maxSpeedMph = speedLimit || (recSpeed ? Math.round(recSpeed / 0.8) : null);
+
+    // Build the graphic based on feature type
+    let graphic = '';
+    let typeLabel = '';
+    let positionAdvice = '';
+    let positionDots = '';
+
+    if (type === 'roundabout' || type === 'mini_roundabout') {
+        typeLabel      = type === 'mini_roundabout' ? 'Mini roundabout' : 'Roundabout';
+        positionAdvice = 'Keep left · Give way';
+        graphic        = buildRoundaboutGraphic(W/2, 72, direction);
+        positionDots   = buildPositionDots(W/2, 148, 'POS_1');
+
+    } else if (type === 'traffic_signals') {
+        typeLabel      = 'Traffic lights';
+        positionAdvice = 'Prepare to stop';
+        graphic        = buildTrafficLightGraphic(W/2, 72, urgency);
+        positionDots   = buildPositionDots(W/2, 148, 'POS_2');
+
+    } else if (type === 'give_way') {
+        typeLabel      = 'Give way';
+        positionAdvice = 'Reduce speed · check right';
+        graphic        = buildGiveWayGraphic(W/2, 72);
+        positionDots   = buildPositionDots(W/2, 148, 'POS_2');
+
+    } else if (type === 'stop_sign') {
+        typeLabel      = 'Stop sign';
+        positionAdvice = 'Come to a full stop';
+        graphic        = buildStopGraphic(W/2, 72);
+        positionDots   = buildPositionDots(W/2, 148, 'POS_2');
+
+    } else {
+        // corner
+        const severity  = !curve ? 'gentle' : curve.r_eff >= 60 ? 'gentle' : curve.r_eff >= 20 ? 'sharp' : 'hairpin';
+        const dir       = (typeof direction === 'string') ? direction : (curve?.direction || 'RIGHT');
+        typeLabel       = severity.charAt(0).toUpperCase() + severity.slice(1) + ' ' + dir.toLowerCase();
+        positionAdvice  = dir === 'RIGHT' ? 'Move left · then right at apex' : 'Move right · then left at apex';
+        graphic         = buildCornerGraphic(W/2, 72, dir, severity);
+        const pos       = dir === 'RIGHT' ? (distM > 80 ? 'POS_1' : 'POS_3') : (distM > 80 ? 'POS_3' : 'POS_1');
+        positionDots    = buildPositionDots(W/2, 148, pos);
+    }
+
+    // Speed recommendation row
+    const speedRow = (recSpeed || maxSpeedMph) ? `
+        <rect x="${W/2 - 45}" y="160" width="90" height="24" rx="6" fill="rgba(255,255,255,0.08)"/>
+        <text x="${W/2}" y="177" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="13" fill="#f0eeeb">
+            ${recSpeed ? 'Rec ' + recSpeed + ' mph' : ''}${recSpeed && maxSpeedMph ? '  ·  ' : ''}${maxSpeedMph && !recSpeed ? 'Limit ~' + maxSpeedMph + ' mph' : ''}
+        </text>` : '';
+
+    return `<svg width="${W}" height="${H + (speedRow ? 10 : -10)}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <!-- Background -->
+        <rect width="${W}" height="${H}" rx="16" fill="rgba(10,12,15,${bgAlpha})"/>
+        <rect width="${W}" height="${H}" rx="16" fill="none" stroke="${borderColor}" stroke-width="2"/>
+        <!-- Top accent bar -->
+        <rect width="${W}" height="4" rx="2" fill="${borderColor}"/>
+        <!-- Type label -->
+        <text x="${W/2}" y="22" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="14" fill="${borderColor}" letter-spacing="1">${typeLabel.toUpperCase()}</text>
+        <!-- Distance badge -->
+        <rect x="${W/2 - 28}" y="26" width="56" height="18" rx="9" fill="${borderColor}" opacity="0.2"/>
+        <text x="${W/2}" y="39" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="13" fill="${borderColor}">${distText}</text>
+        <!-- Feature graphic -->
+        ${graphic}
+        <!-- Position dots -->
+        ${positionDots}
+        <!-- Position advice text -->
+        <text x="${W/2}" y="143" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="#6b7280">${positionAdvice}</text>
+        <!-- Speed row -->
+        ${speedRow}
+    </svg>`;
+}
+
+// ── Graphic builders ──
+
+function buildRoundaboutGraphic(cx, cy, direction) {
+    // Circular roundabout with entry arrow
+    const r = 32, rInner = 14;
+    const arrowDir = direction === 'LEFT' ? 1 : -1;
+    return `
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#3b82f6" stroke-width="3" stroke-dasharray="6 4" opacity="0.6"/>
+        <circle cx="${cx}" cy="${cy}" r="${rInner}" fill="rgba(59,130,246,0.15)" stroke="#3b82f6" stroke-width="1.5"/>
+        <path d="M ${cx + arrowDir * r} ${cy} A ${r} ${r} 0 0 ${direction === 'RIGHT' ? 1 : 0} ${cx} ${cy - r}" fill="none" stroke="#2dd4bf" stroke-width="3" marker-end="url(#arr)"/>
+        <defs><marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2dd4bf"/></marker></defs>
+        <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="11" fill="#2dd4bf">GIVE WAY</text>`;
+}
+
+function buildTrafficLightGraphic(cx, cy, urgency) {
+    const colors = urgency === 'imminent' ? ['#ef4444','#6b7280','#6b7280'] : ['#6b7280','#eab308','#6b7280'];
+    return `
+        <rect x="${cx - 12}" y="${cy - 36}" width="24" height="72" rx="6" fill="rgba(255,255,255,0.08)" stroke="#6b7280" stroke-width="1.5"/>
+        <circle cx="${cx}" cy="${cy - 24}" r="8" fill="${colors[0]}" filter="url(#glow)"/>
+        <circle cx="${cx}" cy="${cy}" r="8" fill="${colors[1]}"/>
+        <circle cx="${cx}" cy="${cy + 24}" r="8" fill="#22c55e" opacity="0.3"/>`;
+}
+
+function buildGiveWayGraphic(cx, cy) {
+    const pts = `${cx},${cy - 30} ${cx + 26},${cy + 14} ${cx - 26},${cy + 14}`;
+    return `
+        <polygon points="${pts}" fill="none" stroke="#eab308" stroke-width="3"/>
+        <polygon points="${cx},${cy - 22} ${cx + 19},${cy + 9} ${cx - 19},${cy + 9}" fill="rgba(234,179,8,0.15)"/>
+        <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="14" fill="#eab308">GIVE WAY</text>`;
+}
+
+function buildStopGraphic(cx, cy) {
+    // Octagon
+    const r = 28, pts = Array.from({length: 8}, (_,i) => {
+        const a = (i * 45 - 22.5) * Math.PI / 180;
+        return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`;
+    }).join(' ');
+    return `
+        <polygon points="${pts}" fill="rgba(239,68,68,0.15)" stroke="#ef4444" stroke-width="3"/>
+        <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="16" fill="#ef4444">STOP</text>`;
+}
+
+function buildCornerGraphic(cx, cy, direction, severity) {
+    const color   = severity === 'hairpin' ? '#ef4444' : severity === 'sharp' ? '#f97316' : '#eab308';
+    const mirror  = direction === 'LEFT' ? -1 : 1;
+    // Curved arrow representing the corner shape
+    const sx = cx - mirror * 30, sy = cy + 28;
+    const ex = cx + mirror * 30, ey = cy - 28;
+    const c1x = cx - mirror * 30, c1y = cy - 10;
+    const c2x = cx + mirror * 10, c2y = cy - 28;
+    const arrowHead = direction === 'RIGHT'
+        ? `M ${ex - 8},${ey - 4} L ${ex},${ey} L ${ex - 4},${ey + 8}`
+        : `M ${ex + 8},${ey - 4} L ${ex},${ey} L ${ex + 4},${ey + 8}`;
+
+    // Severity label
+    const sevLabel = severity === 'hairpin' ? 'HAIRPIN' : severity === 'sharp' ? 'SHARP' : 'GENTLE';
+    return `
+        <path d="M ${sx} ${sy} C ${c1x} ${c1y} ${c2x} ${c2y} ${ex} ${ey}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round"/>
+        <path d="${arrowHead}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="${cx}" y="${cy + 42}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="13" fill="${color}" letter-spacing="1">${sevLabel}</text>`;
+}
+
+function buildPositionDots(cx, cy, position) {
+    // Three dots representing road position (like HUD pos dots but in the rally card)
+    const positions  = ['POS_1', 'POS_2', 'POS_3'];
+    const dotSpacing = 16;
+    return positions.map((p, i) => {
+        const x      = cx + (i - 1) * dotSpacing;
+        const active = p === position;
+        return `<circle cx="${x}" cy="${cy}" r="${active ? 7 : 4}" fill="${active ? '#2dd4bf' : 'rgba(255,255,255,0.15)'}" ${active ? 'filter="url(#glow)"' : ''}/>`;
+    }).join('');
 }
 
 function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
