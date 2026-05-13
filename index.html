@@ -1987,6 +1987,7 @@ let waypointCount   = 0;
 let allRoutes       = []; // store fetched alternative routes
 let activeRouteIdx  = 0;  // which route is selected
 let waypointMarkers = []; // mapbox markers for waypoints
+const ROUTE_SOURCE_IDS = ['route-0', 'route-1', 'route-2']; // fixed source IDs for 3 routes
 
 function addWaypoint() {
     waypointCount++;
@@ -3725,8 +3726,7 @@ async function planRoute() {
         errEl.style.display = 'block'; return;
     }
 
-    btnRoute.textContent = 'Loading…';
-    btnRoute.disabled = true;
+    if (btnRoute) { btnRoute.textContent = 'Loading…'; btnRoute.disabled = true; }
 
     const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
     const start = startCoords || await getGPSCoords();
@@ -3770,7 +3770,7 @@ async function planRoute() {
         if (!fastestData.routes || fastestData.routes.length === 0) {
             document.getElementById('routeErrorMsg').textContent = 'No route found between these locations.';
             errEl.style.display = 'block';
-            btnRoute.textContent = 'Get route'; btnRoute.disabled = false;
+            if (btnRoute) { btnRoute.textContent = 'Get route'; btnRoute.disabled = false; }
             return;
         }
 
@@ -3798,57 +3798,60 @@ async function planRoute() {
 
         // ── SCENIC ROUTE ──
         // Score all candidates (scenic fetch + any alternatives within budget)
-        // using the full scoring engine, pick highest scorer
         const scenicCandidates = [];
         if (scenicData.routes && scenicData.routes.length > 0) {
             scenicCandidates.push(...scenicData.routes.filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
         }
-        // Also consider any alternatives from the main fetch
         if (leastTrafficData.routes && leastTrafficData.routes.length > 1) {
             scenicCandidates.push(...leastTrafficData.routes.slice(1).filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
         }
 
-        let scenicRoute  = fastestRoute;
-        let scenicBadge  = null;
+        let scenicRoute  = scenicCandidates[0] || fastestRoute;
+        let scenicBadge  = scenicCandidates.length > 0 ? 'A & B roads' : null;
         let scenicWarnings = [];
         let scenicScoreResult = null;
 
+        // Scenic scoring is optional — if it fails, use the first scenic candidate
         if (scenicCandidates.length > 0) {
-            // Score all candidates in parallel
-            btnRoute.textContent = 'Scoring routes…';
-            const scoreResults = await Promise.all(
-                scenicCandidates.map(async r => {
-                    const elevFull = await scoreElevationFull(r.geometry.coordinates, []);
-                    const trafficS = getTrafficSummary(r);
-                    const trafficOrder = { ok: 1, warn: 0.5, crit: 0 };
-                    const steps    = r.legs ? r.legs.flatMap(l => l.steps || []) : [];
-                    let junctions  = 0;
-                    steps.forEach(s => (s.intersections || []).forEach(ix => {
-                        if (ix.classes && (ix.classes.includes('traffic_signal') || ix.classes.includes('stop_sign'))) junctions++;
-                    }));
-                    const corners      = estimateCorners(r.geometry.coordinates);
-                    const w            = scenicSettings.weights;
-                    const greenScore   = await scoreGreenSpace(r.geometry.coordinates);
-                    const total =
-                        elevFull.score                             * w.elevation +
-                        (trafficOrder[trafficS.cls] || 0.5)       * w.traffic   +
-                        Math.max(0, 1 - junctions / 50)           * w.flow      +
-                        Math.min(corners / 30, 1)                 * w.corners   +
-                        greenScore                                 * w.green;
-                    return { route: r, score: total, elevFull, junctions, corners, greenScore, trafficS };
-                })
-            );
-            scoreResults.sort((a, b) => b.score - a.score);
-            const best = scoreResults[0];
-            scenicRoute        = best.route;
-            scenicScoreResult  = best;
-            scenicWarnings     = best.elevFull.steepMins > scenicSettings.gradTolerance
-                ? [`${Math.round(best.elevFull.steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`]
-                : [];
-            if (best.elevFull.hardLimitBreached) {
-                scenicWarnings.push(`Contains sections above ${scenicSettings.gradHardLimit}% — ride with care`);
+            try {
+                btnRoute.textContent = 'Scoring routes…';
+                const scoreResults = await Promise.all(
+                    scenicCandidates.map(async r => {
+                        const elevFull = await scoreElevationFull(r.geometry.coordinates, []);
+                        const trafficS = getTrafficSummary(r);
+                        const trafficOrder = { ok: 1, warn: 0.5, crit: 0 };
+                        const steps    = r.legs ? r.legs.flatMap(l => l.steps || []) : [];
+                        let junctions  = 0;
+                        steps.forEach(s => (s.intersections || []).forEach(ix => {
+                            if (ix.classes && (ix.classes.includes('traffic_signal') || ix.classes.includes('stop_sign'))) junctions++;
+                        }));
+                        const corners    = estimateCorners(r.geometry.coordinates);
+                        const w          = scenicSettings.weights;
+                        const greenScore = await scoreGreenSpace(r.geometry.coordinates);
+                        const total =
+                            elevFull.score                           * w.elevation +
+                            (trafficOrder[trafficS.cls] || 0.5)     * w.traffic   +
+                            Math.max(0, 1 - junctions / 50)         * w.flow      +
+                            Math.min(corners / 30, 1)               * w.corners   +
+                            greenScore                               * w.green;
+                        return { route: r, score: total, elevFull, junctions, corners, greenScore, trafficS };
+                    })
+                );
+                scoreResults.sort((a, b) => b.score - a.score);
+                const best        = scoreResults[0];
+                scenicRoute       = best.route;
+                scenicScoreResult = best;
+                scenicWarnings    = best.elevFull.steepMins > scenicSettings.gradTolerance
+                    ? [`${Math.round(best.elevFull.steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`]
+                    : [];
+                if (best.elevFull.hardLimitBreached) {
+                    scenicWarnings.push(`Contains sections above ${scenicSettings.gradHardLimit}% — ride with care`);
+                }
+                scenicBadge = scenicWarnings.length > 0 ? '⚠ Gradient warning' : 'Scenic scored';
+            } catch(scoringErr) {
+                console.warn('Scenic scoring failed, using first candidate:', scoringErr.message);
+                // scenicRoute already set to first candidate above
             }
-            scenicBadge = scenicWarnings.length > 0 ? '⚠ Gradient warning' : 'Scenic scored';
         }
 
         // ── allRoutes fixed to 3 slots: [fastest, leastTraffic, scenic] ──
@@ -3958,7 +3961,7 @@ async function planRoute() {
         document.getElementById('statCorners').textContent = corners;
         document.getElementById('statTraffic').textContent = trafficSummary.label;
         document.getElementById('statTraffic').className   = 'rs-val ' + trafficSummary.cls;
-        document.getElementById('routeStats').classList.add('visible');
+        // routeStats is hidden (backend only) — no visible action needed
 
         // Show banner on map
         if (avoidMotorways) document.getElementById('rbDist').title = 'Motorway-free route';
