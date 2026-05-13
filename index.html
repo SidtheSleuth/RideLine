@@ -1512,14 +1512,10 @@ async function geocodeSuggest(inputId, listId) {
     clearTimeout(geocodeTimers[inputId]);
     geocodeTimers[inputId] = setTimeout(async () => {
         try {
-            // Use Google Places Autocomplete API for richer results
-            const url = `https://places.googleapis.com/v1/places:autocomplete`;
+            const url = 'https://places.googleapis.com/v1/places:autocomplete';
             const res = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Goog-Api-Key': GOOGLE_API_KEY,
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': GOOGLE_API_KEY },
                 body: JSON.stringify({
                     input: query,
                     locationBias: { circle: { center: { latitude: 52.5, longitude: -1.5 }, radius: 500000 } },
@@ -1527,70 +1523,119 @@ async function geocodeSuggest(inputId, listId) {
                 })
             });
             const data = await res.json();
-            list.innerHTML = '';
             if (!data.suggestions || data.suggestions.length === 0) {
                 await geocodeSuggestFallback(inputId, listId, query);
                 return;
             }
-            data.suggestions.forEach(s => {
-                const place = s.placePrediction;
-                if (!place) return;
-                const item = document.createElement('div');
-                item.className = 'autocomplete-item';
-                item.innerHTML = `<i class="ti ti-map-pin"></i><span>${place.text.text}</span>`;
-                item.onclick = async () => {
-                    document.getElementById(inputId).value = place.text.text;
-                    // Resolve place ID to coordinates
-                    const coords = await resolvePlaceCoords(place.placeId);
-                    if (coords) {
-                        if (inputId === 'routeStart') startCoords = coords;
-                        else                           endCoords   = coords;
-                    }
-                    list.style.display = 'none';
-                };
-                list.appendChild(item);
-            });
-            list.style.display = 'block';
+            renderSuggestions(inputId, listId, data.suggestions.map(s => ({
+                label: s.placePrediction?.text?.text || '',
+                placeId: s.placePrediction?.placeId || null,
+                coords: null, // resolved on selection
+                source: 'google'
+            })));
         } catch(e) {
             await geocodeSuggestFallback(inputId, listId, query);
         }
     }, 300);
 }
 
-async function resolvePlaceCoords(placeId) {
-    try {
-        const url = `https://places.googleapis.com/v1/places/${placeId}?fields=location&key=${GOOGLE_API_KEY}`;
-        const res  = await fetch(url);
-        const data = await res.json();
-        if (data.location) return [data.location.longitude, data.location.latitude];
-    } catch(e) {}
-    return null;
-}
-
 async function geocodeSuggestFallback(inputId, listId, query) {
-    // Fallback to Mapbox geocoding if Google fails
     const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
     const url   = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=gb&language=en&limit=5`;
     const list  = document.getElementById(listId);
     try {
         const res  = await fetch(url);
         const data = await res.json();
-        list.innerHTML = '';
         if (!data.features || data.features.length === 0) { list.style.display = 'none'; return; }
-        data.features.forEach(f => {
-            const item = document.createElement('div');
-            item.className = 'autocomplete-item';
-            item.innerHTML = `<i class="ti ti-map-pin" style="color:var(--muted)"></i><span>${f.place_name}</span>`;
-            item.onclick = () => {
-                document.getElementById(inputId).value = f.place_name;
-                if (inputId === 'routeStart') startCoords = f.center;
-                else                           endCoords   = f.center;
-                list.style.display = 'none';
-            };
-            list.appendChild(item);
-        });
-        list.style.display = 'block';
+        renderSuggestions(inputId, listId, data.features.map(f => ({
+            label: f.place_name,
+            placeId: null,
+            coords: f.center,
+            source: 'mapbox'
+        })));
     } catch(e) { list.style.display = 'none'; }
+}
+
+function renderSuggestions(inputId, listId, suggestions) {
+    const list  = document.getElementById(listId);
+    const input = document.getElementById(inputId);
+    list.innerHTML = '';
+
+    suggestions.forEach(s => {
+        if (!s.label) return;
+        const item = document.createElement('div');
+        item.className = 'autocomplete-item';
+        // Show source badge
+        const badge = s.source === 'mapbox'
+            ? `<span style="font-size:9px;color:var(--muted);margin-left:auto;opacity:0.6;">MB</span>`
+            : '';
+        item.innerHTML = `<i class="ti ti-map-pin" style="color:var(--accent);flex-shrink:0;"></i><span style="flex:1;">${s.label}</span>${badge}`;
+
+        item.onclick = async () => {
+            // Immediately set text and hide list — no second tap needed
+            input.value = s.label;
+            list.style.display = 'none';
+
+            // Show loading indicator in input
+            input.style.borderColor = 'var(--accent)';
+
+            let coords = s.coords;
+
+            // Resolve coords if we only have a placeId (Google Places)
+            if (!coords && s.placeId) {
+                try {
+                    const url  = `https://places.googleapis.com/v1/places/${s.placeId}?fields=location&key=${GOOGLE_API_KEY}`;
+                    const res  = await fetch(url);
+                    const data = await res.json();
+                    if (data.location) coords = [data.location.longitude, data.location.latitude];
+                } catch(e) {}
+            }
+
+            // Fallback — geocode the label text via Mapbox if coords still null
+            if (!coords) {
+                try {
+                    const token = localStorage.getItem('mapbox_token') || HARDCODED_TOKEN;
+                    const url   = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(s.label)}.json?access_token=${token}&country=gb&limit=1`;
+                    const res   = await fetch(url);
+                    const data  = await res.json();
+                    if (data.features?.length > 0) coords = data.features[0].center;
+                } catch(e) {}
+            }
+
+            // Store coords and show confirmation
+            if (coords) {
+                if (inputId === 'routeStart') startCoords = coords;
+                else                           endCoords   = coords;
+                input.style.borderColor = 'var(--success)';
+                setTimeout(() => { input.style.borderColor = ''; }, 1500);
+
+                // Drop a preview marker on the map if available
+                if (map && inputId === 'routeEnd') {
+                    if (destMarker) destMarker.remove();
+                    destMarker = new mapboxgl.Marker({ color: '#2dd4bf' })
+                        .setLngLat(coords).addTo(map);
+                    map.flyTo({ center: coords, zoom: 12 });
+                }
+            } else {
+                input.style.borderColor = 'var(--danger)';
+                input.placeholder = 'Could not locate — try again';
+                setTimeout(() => { input.style.borderColor = ''; input.placeholder = inputId === 'routeEnd' ? 'Destination' : 'Start — or use current location'; }, 2500);
+            }
+        };
+        list.appendChild(item);
+    });
+    list.style.display = suggestions.length > 0 ? 'block' : 'none';
+}
+
+async function resolvePlaceCoords(placeId) {
+    // Kept for backward compatibility
+    try {
+        const url  = `https://places.googleapis.com/v1/places/${placeId}?fields=location&key=${GOOGLE_API_KEY}`;
+        const res  = await fetch(url);
+        const data = await res.json();
+        if (data.location) return [data.location.longitude, data.location.latitude];
+    } catch(e) {}
+    return null;
 }
 
 // Close autocomplete lists when clicking outside
