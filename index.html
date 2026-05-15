@@ -658,6 +658,18 @@
                     <span class="scenic-val" id="wCornersVal">5</span>
                 </div>
             </div>
+
+            <div class="scenic-row" style="margin-top:8px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <i class="ti ti-building-skyscraper" style="color:#6b7280;font-size:14px;"></i>
+                    <span style="font-size:13px;color:var(--text);">Urban penalty</span>
+                    <span style="font-size:10px;color:var(--muted);">(avoid built-up areas)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" id="wUrban" min="0" max="10" step="1" value="8" oninput="updateScenicSettings()" style="width:80px;accent-color:#6b7280;">
+                    <span class="scenic-val" id="wUrbanVal">8</span>
+                </div>
+            </div>
         </div>
 
         <!-- Score preview -->
@@ -855,18 +867,23 @@ const GOOGLE_API_KEY  = 'AIzaSyCeST9lZAPiMbkdX8aHYPGcp4jqoflGvls';  // replace w
 
 const THRESHOLDS = {
     corners: {
-        gentle:  { minRadius: 60, recSpeedMph: { novice: 35, intermediate: 50, expert: 65 } },
-        sharp:   { minRadius: 20, recSpeedMph: { novice: 20, intermediate: 30, expert: 40 } },
-        hairpin: { minRadius: 0,  recSpeedMph: { novice: 12, intermediate: 18, expert: 25 } },
+        //  minRadius — curve radius in metres below which this severity applies
+        //  recSpeedMph — recommended speed, calibrated from real-world riding
+        //  Novice speeds increased ~50% from original — reflect real CBT/novice capability
+        gentle:  { minRadius: 40,  recSpeedMph: { novice: 52, intermediate: 62, expert: 72 } },
+        sharp:   { minRadius: 10,  recSpeedMph: { novice: 30, intermediate: 40, expert: 52 } },
+        hairpin: { minRadius: 0,   recSpeedMph: { novice: 18, intermediate: 26, expert: 35 } },
+        // Radius reference: hairpin <10m, sharp 10-40m, gentle >40m
     },
-    alertLookaheadMetres: 200,
+    alertLookaheadMetres: 250,   // increased — warn slightly earlier
     leanAngle: {
-        novice:       { warn: 12, critical: 15 },
-        intermediate: { warn: 25, critical: 30 },
-        expert:       { warn: 38, critical: 45 },
+        // Novice: realistic lean for normal road riding, not track
+        novice:       { warn: 20, critical: 28 },
+        intermediate: { warn: 30, critical: 38 },
+        expert:       { warn: 40, critical: 48 },
     },
     deceleration: { novice: 5.5, intermediate: 7.0, expert: 8.5 },
-    safetyMargin: 1.3,
+    safetyMargin: 1.25,  // slightly reduced — was too conservative
 };
 
 let userSkill    = 'novice';
@@ -1428,8 +1445,8 @@ function updateSpeedMarkers(curve) {
             maxSpeed  = Math.round(v_limit_ms * 2.237);
             recSpeed  = Math.round(maxSpeed * 0.8); // recommended = 80% of max (20% lower)
         } else {
-            // No corner — use skill-based road speed limits
-            maxSpeed  = { novice: 60, intermediate: 80, expert: 100 }[skill];
+            // No corner — use skill-based open road comfortable speeds
+            maxSpeed  = { novice: 70, intermediate: 85, expert: 100 }[skill];
             recSpeed  = Math.round(maxSpeed * 0.8);
         }
 
@@ -1779,6 +1796,9 @@ function onPosition(pos) {
     // Update stationary state — gates pollen/sun banners
     updateStationaryState(speedMph);
 
+    // Tick obstacle queue — check if rider has passed current obstacle
+    tickObstacleQueue(speedMph);
+
     // Run road lookahead and feature detection when GPS is active
     if (speedMph >= LOOKAHEAD_MIN_SPEED) {
         if (!navActive) runLookahead(lat, lng, heading, speedMph);
@@ -2108,8 +2128,8 @@ function selectAltRoute(idx) {
     // Flash banner border colour to confirm selection
     showMapRouteLabel(idx);
     closeRouteModal();
-    // Refresh picker if visible
-    if (document.getElementById('routePicker')?.style.display !== 'none') showMapRoutePicker();
+    // Update picker card highlight directly — faster than full rebuild
+    updatePickerHighlight(idx);
 }
 let avoidTolls     = false;
 let preferTwisty   = false;
@@ -2125,6 +2145,7 @@ let scenicSettings = {
         traffic:   7,  // low traffic weight
         flow:      6,  // flow quality (fewer junctions) weight
         corners:   5,  // twistiness weight
+        urban:     8,  // urban penalty weight (higher = stronger penalty for urban routes)
     }
 };
 
@@ -2138,6 +2159,7 @@ function openScenicModal() {
     document.getElementById('wTraffic').value      = scenicSettings.weights.traffic;
     document.getElementById('wFlow').value         = scenicSettings.weights.flow;
     document.getElementById('wCorners').value      = scenicSettings.weights.corners;
+    document.getElementById('wUrban').value        = scenicSettings.weights.urban || 8;
     updateScenicSettings();
     document.getElementById('scenicOverlay').classList.remove('hidden');
 }
@@ -2158,6 +2180,8 @@ function updateScenicSettings() {
     scenicSettings.weights.traffic   = parseInt(document.getElementById('wTraffic').value);
     scenicSettings.weights.flow      = parseInt(document.getElementById('wFlow').value);
     scenicSettings.weights.corners   = parseInt(document.getElementById('wCorners').value);
+    scenicSettings.weights.urban     = parseInt(document.getElementById('wUrban').value || '8');
+    document.getElementById('wUrbanVal').textContent  = scenicSettings.weights.urban;
     // Update displayed values
     document.getElementById('gradSoftVal').textContent      = scenicSettings.gradSoftLimit + '%';
     document.getElementById('gradHardVal').textContent      = scenicSettings.gradHardLimit + '%';
@@ -2422,33 +2446,93 @@ async function scoreElevationFull(coords, warnings) {
 }
 
 async function scoreGreenSpace(coords) {
-    // Sample a bounding box around the route and query OSM for green landuse
+    // Query OSM in a single request for both green space and urban indicators
+    // Uses route corridor rather than simple bounding box to avoid false positives
+    // from features that are near but not along the route
     const lngs = coords.map(c => c[0]);
-    const lats = coords.map(c => c[1]);
+    const lats  = coords.map(c => c[1]);
+
+    // Tight corridor — 0.008° (~880m) padding, not full bbox
     const bbox = [
-        Math.min(...lngs) - 0.01,
-        Math.min(...lats) - 0.01,
-        Math.max(...lngs) + 0.01,
-        Math.max(...lats) + 0.01
+        Math.min(...lngs) - 0.008,
+        Math.min(...lats) - 0.008,
+        Math.max(...lngs) + 0.008,
+        Math.max(...lats) + 0.008,
     ];
+    const b = `${bbox[1]},${bbox[0]},${bbox[3]},${bbox[2]}`;
 
     try {
         const query = `
-            [out:json][timeout:10];
-            (
-              way["landuse"~"forest|grass|meadow|farmland|wood|nature_reserve|heath|scrub"](${bbox[1]},${bbox[0]},${bbox[3]},${bbox[2]});
-              relation["leisure"~"nature_reserve|park"](${bbox[1]},${bbox[0]},${bbox[3]},${bbox[2]});
-            );
-            out count;`;
+[out:json][timeout:12];
+(
+  // ── GREEN INDICATORS (positive) ──
+  way["landuse"~"^(forest|grass|meadow|farmland|wood|heath|scrub|orchard|vineyard|allotments)$"](${b});
+  way["natural"~"^(wood|scrub|heath|grassland|moor|fell|wetland|marsh)$"](${b});
+  relation["leisure"~"^(nature_reserve|park|garden)$"](${b});
+  way["leisure"~"^(nature_reserve|park|garden)$"](${b});
+  // ── URBAN INDICATORS (negative) ──
+  way["landuse"~"^(residential|commercial|industrial|retail|construction)$"](${b});
+  node["place"~"^(city|town|suburb)$"](${b});
+  way["highway"~"^(motorway|trunk|primary)$"](${b});
+);
+out tags;`;
+
         const res  = await fetch('https://overpass-api.de/api/interpreter', {
             method: 'POST',
             body: 'data=' + encodeURIComponent(query)
         });
         const data = await res.json();
-        const count = data.elements?.[0]?.tags?.total || 0;
-        // Normalise: 0 = no green, 10+ features = max score
-        return Math.min(count / 10, 1);
-    } catch(e) { return 0.5; }
+        const elements = data.elements || [];
+
+        // Tally green vs urban features
+        let greenCount = 0;
+        let urbanCount = 0;
+
+        const GREEN_LANDUSE  = new Set(['forest','grass','meadow','farmland','wood','heath','scrub','orchard','vineyard','allotments']);
+        const GREEN_NATURAL  = new Set(['wood','scrub','heath','grassland','moor','fell','wetland','marsh']);
+        const GREEN_LEISURE  = new Set(['nature_reserve','park','garden']);
+        const URBAN_LANDUSE  = new Set(['residential','commercial','industrial','retail','construction']);
+        const URBAN_HIGHWAY  = new Set(['motorway','trunk','primary']);
+
+        elements.forEach(el => {
+            const tags = el.tags || {};
+            if (GREEN_LANDUSE.has(tags.landuse) || GREEN_NATURAL.has(tags.natural) || GREEN_LEISURE.has(tags.leisure)) {
+                greenCount++;
+            }
+            if (URBAN_LANDUSE.has(tags.landuse) || URBAN_HIGHWAY.has(tags.highway) || tags.place) {
+                urbanCount++;
+            }
+        });
+
+        // Green score: normalise against 12 features for a good rural route
+        const greenScore = Math.min(greenCount / 12, 1);
+
+        // Urban penalty: scaled 0-1 where 1 = highly urban (many urban features)
+        // Penalty is applied as a multiplier: more urban = lower final score
+        // 8+ urban features = maximum penalty (0.2 multiplier)
+        const urbanPenalty = Math.min(urbanCount / 8, 1);
+        const urbanMultiplier = 1 - (urbanPenalty * 0.8); // range 0.2 to 1.0
+
+        // Final score combines green presence with urban penalty
+        const finalScore = greenScore * urbanMultiplier;
+
+        return {
+            score:         Math.max(finalScore, 0.05),
+            greenScore,
+            urbanPenalty,
+            urbanMultiplier,
+            greenCount,
+            urbanCount,
+            // Human-readable classification
+            classification: urbanPenalty > 0.6 ? 'Urban'
+                          : urbanPenalty > 0.3 ? 'Semi-rural'
+                          : greenCount > 6     ? 'Rural/scenic'
+                          : 'Mixed',
+        };
+
+    } catch(e) {
+        return { score: 0.5, greenScore: 0.5, urbanPenalty: 0, urbanMultiplier: 1, greenCount: 0, urbanCount: 0, classification: 'Unknown' };
+    }
 }
 
 function haversineKm([lng1, lat1], [lng2, lat2]) {
@@ -2530,6 +2614,9 @@ function startNavigation() {
 function endNavigation() {
     navActive = false;
     otsMode   = false;
+    // Clear obstacle queue on nav end
+    obstacleQueue  = [];
+    clearActiveObstacle();
     currentMapStyle = 'dark';
 
     // Show banner start button again, hide end nav bar
@@ -3166,9 +3253,141 @@ async function fetchAirQuality(lat, lng) {
 let lastFeatureFetchPos  = null;
 let currentRoadFeature   = null; // { type, distanceMetres, direction, exits, speedLimit }
 let rallyCardTimer       = null;
+
+// ── OBSTACLE QUEUE ──
+// Ensures obstacles are reported one at a time in sequence.
+// A new obstacle is only shown after the rider has passed the current one.
+let obstacleQueue        = [];    // sorted array of pending obstacles
+let activeObstacle       = null;  // the obstacle currently being shown
+let obstaclePassedDist   = null;  // last known distance to active obstacle (metres)
+let obstacleLastUpdateMs = null;  // timestamp of last distance update
+let obstacleLockTimer    = null;  // minimum lock time to prevent rapid switching
+const OBSTACLE_PASS_MARGIN_M   = 10;   // metres past zero before considered passed
+const OBSTACLE_MIN_LOCK_MS     = 2000; // min ms before next obstacle can show
 let featureFetchTimer    = null;
 const FEATURE_FETCH_DIST = 0.05;  // km — refetch if moved 50m
-const RALLY_CARD_LOOKAHEAD_M = 400; // metres ahead to query
+const RALLY_CARD_LOOKAHEAD_M = 250; // metres ahead to query
+
+/* ═══════════════════════════════════════════════
+   OBSTACLE QUEUE — sequential reporting
+═══════════════════════════════════════════════ */
+
+function submitObstacle(obstacle) {
+    // obstacle: { type, distanceMetres, direction, speedLimit, curve, source }
+    if (!obstacle || obstacle.distanceMetres == null) return;
+
+    // If this is the same type at roughly the same distance as active, just update distance
+    if (activeObstacle &&
+        activeObstacle.type === obstacle.type &&
+        Math.abs(activeObstacle.distanceMetres - obstacle.distanceMetres) < 30) {
+        activeObstacle.distanceMetres = obstacle.distanceMetres;
+        obstaclePassedDist   = obstacle.distanceMetres;
+        obstacleLastUpdateMs = Date.now(); // refresh timestamp on every confirmed sighting
+        // Update the displayed card distance
+        showRallyCard(activeObstacle.type, obstacle.distanceMetres,
+            activeObstacle.direction, activeObstacle.speedLimit, activeObstacle.curve);
+        return;
+    }
+
+    // Don't queue if already locked onto an obstacle (rider hasn't passed yet)
+    if (activeObstacle && obstacleLockTimer) return;
+
+    // Check if rider has passed the current active obstacle
+    if (activeObstacle && obstaclePassedDist !== null) {
+        const distGrew = obstacle.distanceMetres > obstaclePassedDist + OBSTACLE_PASS_MARGIN_M;
+        const differentObstacle = activeObstacle.type !== obstacle.type ||
+            Math.abs(activeObstacle.distanceMetres - obstacle.distanceMetres) > 40;
+
+        if (!distGrew && !differentObstacle) {
+            // Same obstacle, not yet passed — update distance only
+            activeObstacle.distanceMetres = obstacle.distanceMetres;
+            obstaclePassedDist = obstacle.distanceMetres;
+            showRallyCard(activeObstacle.type, activeObstacle.distanceMetres,
+                activeObstacle.direction, activeObstacle.speedLimit, activeObstacle.curve);
+            return;
+        }
+        // Distance grew — rider has passed the active obstacle
+        clearActiveObstacle();
+    }
+
+    // No active obstacle — show this one immediately
+    if (!activeObstacle) {
+        activateObstacle(obstacle);
+        return;
+    }
+
+    // Queue it sorted by distance
+    obstacleQueue.push(obstacle);
+    obstacleQueue.sort((a, b) => a.distanceMetres - b.distanceMetres);
+}
+
+function activateObstacle(obstacle) {
+    activeObstacle       = obstacle;
+    obstaclePassedDist   = obstacle.distanceMetres;
+    obstacleLastUpdateMs = Date.now();
+
+    // Lock for minimum period to prevent flicker
+    clearTimeout(obstacleLockTimer);
+    obstacleLockTimer = setTimeout(() => {
+        obstacleLockTimer = null;
+    }, OBSTACLE_MIN_LOCK_MS);
+
+    showRallyCard(obstacle.type, obstacle.distanceMetres,
+        obstacle.direction, obstacle.speedLimit, obstacle.curve);
+}
+
+function clearActiveObstacle() {
+    activeObstacle       = null;
+    obstaclePassedDist   = null;
+    obstacleLastUpdateMs = null;
+    clearTimeout(obstacleLockTimer);
+    obstacleLockTimer    = null;
+
+    // Show next queued obstacle if any
+    if (obstacleQueue.length > 0) {
+        const next = obstacleQueue.shift();
+        setTimeout(() => activateObstacle(next), 300); // brief gap between obstacles
+    } else {
+        hideRallyCard();
+    }
+}
+
+function tickObstacleQueue(currentSpeedMph) {
+    // Called every GPS update — use dead-reckoning to estimate current distance
+    // to active obstacle based on speed × elapsed time since last API update
+    if (!activeObstacle) return;
+
+    const now     = Date.now();
+    const elapsed = obstacleLastUpdateMs ? (now - obstacleLastUpdateMs) / 1000 : 0; // seconds
+    const speedMs = currentSpeedMph * 0.44704; // convert mph → m/s
+
+    // Dead-reckoned distance — decreases continuously as rider approaches
+    const estimatedDist = obstaclePassedDist - (speedMs * elapsed);
+
+    // Update the rally card with the live estimated distance so it counts down
+    if (activeObstacle && estimatedDist > 0) {
+        const displayDist = Math.max(0, Math.round(estimatedDist));
+        showRallyCard(activeObstacle.type, displayDist,
+            activeObstacle.direction, activeObstacle.speedLimit, activeObstacle.curve);
+    }
+
+    // Obstacle passed when estimated distance goes negative (plus margin)
+    // Don't clear during lock period to prevent premature dismissal
+    if (estimatedDist < -OBSTACLE_PASS_MARGIN_M && !obstacleLockTimer) {
+        clearActiveObstacle();
+        return;
+    }
+
+    // Also clear if rider has been stopped at the obstacle for >3s
+    // (e.g. waiting at traffic lights or stop sign)
+    if (currentSpeedMph < 2 && estimatedDist < 15 && !obstacleLockTimer) {
+        clearTimeout(obstacleLockTimer);
+        obstacleLockTimer = setTimeout(() => {
+            obstacleLockTimer = null;
+            clearActiveObstacle();
+        }, 3000);
+    }
+}
 
 async function detectRoadFeatures(lat, lng, heading, speedMph) {
     if (speedMph < 5) return;
@@ -3191,7 +3410,6 @@ async function detectRoadFeatures(lat, lng, heading, speedMph) {
   way[junction=roundabout](${bbox});
   node[highway=mini_roundabout](${bbox});
   node[highway=traffic_signals](${bbox});
-  node[highway=give_way](${bbox});
   node[highway=stop](${bbox});
 );
 out geom;`;
@@ -3227,7 +3445,6 @@ out geom;`;
                 featureLng = el.lon;
                 if (el.tags?.highway === 'mini_roundabout')   type = 'mini_roundabout';
                 if (el.tags?.highway === 'traffic_signals')   type = 'traffic_signals';
-                if (el.tags?.highway === 'give_way')          type = 'give_way';
                 if (el.tags?.highway === 'stop')              type = 'stop_sign';
             }
 
@@ -3267,13 +3484,18 @@ out geom;`;
         if (features.length > 0) {
             const f = features[0];
             currentRoadFeature = { ...f, speedLimit };
-            showRallyCard(f.type, f.distM, heading || compassDeg, speedLimit, lookaheadCurve);
+            submitObstacle({ type: f.type, distanceMetres: f.distM,
+                direction: heading || compassDeg, speedLimit, curve: lookaheadCurve, source: 'osm' });
         } else if (lookaheadCurve) {
-            // No OSM junction/roundabout — show corner card from lookahead geometry
+            // No OSM junction/roundabout — submit corner from lookahead geometry
             currentRoadFeature = { type: 'corner', ...lookaheadCurve, speedLimit };
-            showRallyCard('corner', lookaheadCurve.distanceMetres, lookaheadCurve.direction, speedLimit, lookaheadCurve);
-        } else {
-            hideRallyCard();
+            submitObstacle({ type: 'corner', distanceMetres: lookaheadCurve.distanceMetres,
+                direction: lookaheadCurve.direction, speedLimit, curve: lookaheadCurve, source: 'lookahead' });
+        } else if (!obstacleLockTimer) {
+            // Nothing ahead — clear queue if not locked
+            if (activeObstacle && obstaclePassedDist !== null && obstaclePassedDist < 20) {
+                clearActiveObstacle();
+            }
         }
 
     } catch(e) {
@@ -3289,8 +3511,8 @@ function showRallyCard(type, distM, direction, speedLimit, curve) {
     const card = document.getElementById('rallyCard');
     if (!card) return;
 
-    // Only show card when approaching — within 300m and moving
-    if (distM > 300) { hideRallyCard(); return; }
+    // Only show card when approaching — within 200m and moving
+    if (distM > 200) { hideRallyCard(); return; }
 
     const urgency = distM < 80 ? 'imminent' : distM < 150 ? 'close' : 'approaching';
     const svg     = buildRallyCardSVG(type, distM, direction, speedLimit, curve, urgency);
@@ -3330,7 +3552,7 @@ function buildRallyCardSVG(type, distM, direction, speedLimit, curve, urgency) {
 
     // Speed info
     const recSpeed    = curve ? THRESHOLDS.corners[
-        curve.r_eff >= 60 ? 'gentle' : curve.r_eff >= 20 ? 'sharp' : 'hairpin'
+        curve.r_eff >= THRESHOLDS.corners.gentle.minRadius ? 'gentle' : curve.r_eff >= THRESHOLDS.corners.sharp.minRadius ? 'sharp' : 'hairpin'
     ].recSpeedMph[userSkill] : null;
     const maxSpeedMph = speedLimit || (recSpeed ? Math.round(recSpeed / 0.8) : null);
 
@@ -3343,19 +3565,13 @@ function buildRallyCardSVG(type, distM, direction, speedLimit, curve, urgency) {
     if (type === 'roundabout' || type === 'mini_roundabout') {
         typeLabel      = type === 'mini_roundabout' ? 'Mini roundabout' : 'Roundabout';
         positionAdvice = 'Keep left · Give way';
-        graphic        = buildRoundaboutGraphic(W/2, 72, direction);
+        graphic        = buildRoundaboutGraphic(W/2, 72, direction, type === 'mini_roundabout');
         positionDots   = buildPositionDots(W/2, 148, 'POS_1');
 
     } else if (type === 'traffic_signals') {
         typeLabel      = 'Traffic lights';
         positionAdvice = 'Prepare to stop';
         graphic        = buildTrafficLightGraphic(W/2, 72, urgency);
-        positionDots   = buildPositionDots(W/2, 148, 'POS_2');
-
-    } else if (type === 'give_way') {
-        typeLabel      = 'Give way';
-        positionAdvice = 'Reduce speed · check right';
-        graphic        = buildGiveWayGraphic(W/2, 72);
         positionDots   = buildPositionDots(W/2, 148, 'POS_2');
 
     } else if (type === 'stop_sign') {
@@ -3366,7 +3582,7 @@ function buildRallyCardSVG(type, distM, direction, speedLimit, curve, urgency) {
 
     } else {
         // corner
-        const severity  = !curve ? 'gentle' : curve.r_eff >= 60 ? 'gentle' : curve.r_eff >= 20 ? 'sharp' : 'hairpin';
+        const severity  = !curve ? 'gentle' : curve.r_eff >= THRESHOLDS.corners.gentle.minRadius ? 'gentle' : curve.r_eff >= THRESHOLDS.corners.sharp.minRadius ? 'sharp' : 'hairpin';
         const dir       = (typeof direction === 'string') ? direction : (curve?.direction || 'RIGHT');
         typeLabel       = severity.charAt(0).toUpperCase() + severity.slice(1) + ' ' + dir.toLowerCase();
         positionAdvice  = dir === 'RIGHT' ? 'Move left · then right at apex' : 'Move right · then left at apex';
@@ -3409,16 +3625,80 @@ function buildRallyCardSVG(type, distM, direction, speedLimit, curve, urgency) {
 
 // ── Graphic builders ──
 
-function buildRoundaboutGraphic(cx, cy, direction) {
-    // Circular roundabout with entry arrow
-    const r = 32, rInner = 14;
-    const arrowDir = direction === 'LEFT' ? 1 : -1;
+function buildRoundaboutGraphic(cx, cy, direction, isMini = false) {
+    // UK roundabouts: always travel anticlockwise (keep left)
+    // Entry from bottom, travel anticlockwise, exit on the right side
+    const r      = isMini ? 22 : 32;
+    const rInner = isMini ? 8  : 13;
+    const rTrack = r - 6; // travel path radius (between inner and outer)
+
+    // Entry point — bottom centre (rider approaching from below)
+    const entryX = cx;
+    const entryY = cy + r;
+
+    // Exit point — left side (clockwise from bottom = exit on left)
+    // UK roundabouts: entry at bottom, travel clockwise, first exit is to the left
+    const exitX  = cx - r;
+    const exitY  = cy;
+
+    // Travel arc: clockwise from entry (bottom) to exit (left)
+    // SVG arc: from (cx, cy+rTrack) clockwise to (cx-rTrack, cy)
+    const tx1 = cx;
+    const ty1 = cy + rTrack;
+    const tx2 = cx - rTrack;
+    const ty2 = cy;
+
+    // Approach line — rider comes from below
+    const approachY = cy + r + 18;
+
+    // Arrowhead marker points
+    // Arrow on travel arc at exit point — pointing upward (right side, moving up)
+    const arrowAngle = 0; // exit is at right (0°) heading upward
+
     return `
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#3b82f6" stroke-width="3" stroke-dasharray="6 4" opacity="0.6"/>
-        <circle cx="${cx}" cy="${cy}" r="${rInner}" fill="rgba(59,130,246,0.15)" stroke="#3b82f6" stroke-width="1.5"/>
-        <path d="M ${cx + arrowDir * r} ${cy} A ${r} ${r} 0 0 ${direction === 'RIGHT' ? 1 : 0} ${cx} ${cy - r}" fill="none" stroke="#2dd4bf" stroke-width="3" marker-end="url(#arr)"/>
-        <defs><marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2dd4bf"/></marker></defs>
-        <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="11" fill="#2dd4bf">GIVE WAY</text>`;
+        <defs>
+            <marker id="rbt-arr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+                <path d="M1,1 L7,4 L1,7 Z" fill="#2dd4bf"/>
+            </marker>
+            <marker id="rbt-entry" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+                <path d="M1,1 L7,4 L1,7 Z" fill="#3b82f6"/>
+            </marker>
+        </defs>
+
+        <!-- Outer ring -->
+        <circle cx="${cx}" cy="${cy}" r="${r}"
+            fill="none" stroke="rgba(59,130,246,0.35)" stroke-width="${isMini ? 2 : 2.5}"/>
+
+        <!-- Inner island -->
+        <circle cx="${cx}" cy="${cy}" r="${rInner}"
+            fill="rgba(59,130,246,0.12)" stroke="#3b82f6" stroke-width="1.5"/>
+
+        <!-- Clockwise travel arc: entry (bottom) → exit (left) -->
+        <!-- sweep-flag=1 = clockwise -->
+        <path d="M ${tx1} ${ty1} A ${rTrack} ${rTrack} 0 0 1 ${tx2} ${ty2}"
+            fill="none" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"
+            marker-end="url(#rbt-arr)"/>
+
+        <!-- Entry approach line from below -->
+        <line x1="${cx}" y1="${approachY}" x2="${cx}" y2="${cy + r + 2}"
+            stroke="#3b82f6" stroke-width="3" stroke-linecap="round"
+            marker-end="url(#rbt-entry)"/>
+
+        <!-- Entry label -->
+        <text x="${cx - 10}" y="${approachY + 2}"
+            font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="9"
+            fill="#3b82f6" letter-spacing="0.5">IN</text>
+
+        <!-- Exit label -->
+        <text x="${exitX - 28}" y="${exitY + 4}"
+            font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="9"
+            fill="#2dd4bf" letter-spacing="0.5">EXIT</text>
+
+        <!-- Clockwise direction indicator inside ring -->
+        <text x="${cx}" y="${cy + 5}"
+            text-anchor="middle"
+            font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="${isMini ? 10 : 11}"
+            fill="rgba(59,130,246,0.7)">↻</text>`;
 }
 
 function buildTrafficLightGraphic(cx, cy, urgency) {
@@ -3430,13 +3710,7 @@ function buildTrafficLightGraphic(cx, cy, urgency) {
         <circle cx="${cx}" cy="${cy + 24}" r="8" fill="#22c55e" opacity="0.3"/>`;
 }
 
-function buildGiveWayGraphic(cx, cy) {
-    const pts = `${cx},${cy - 30} ${cx + 26},${cy + 14} ${cx - 26},${cy + 14}`;
-    return `
-        <polygon points="${pts}" fill="none" stroke="#eab308" stroke-width="3"/>
-        <polygon points="${cx},${cy - 22} ${cx + 19},${cy + 9} ${cx - 19},${cy + 9}" fill="rgba(234,179,8,0.15)"/>
-        <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="14" fill="#eab308">GIVE WAY</text>`;
-}
+
 
 function buildStopGraphic(cx, cy) {
     // Octagon
@@ -3500,12 +3774,12 @@ let lookaheadCurve        = null;    // current detected curve { r_eff, directio
 let lookaheadHistory      = [];      // ring buffer of last 5 GPS positions for map matching
 let lastLookaheadPos      = null;    // last position we ran lookahead from
 let lookaheadLayer        = 'lookahead-line'; // map layer id
-const LOOKAHEAD_METRES    = 500;
+const LOOKAHEAD_METRES    = 250;
 const LOOKAHEAD_MIN_SPEED = 5;       // mph — don't run below this
 const LOOKAHEAD_INTERVAL  = 3000;    // ms between lookahead updates
-const JUNCTION_BEARING_THRESHOLD = 25; // degrees — change above this at a single point = junction
-const CORNER_MIN_BEARING_TOTAL   = 15; // total bearing change over segment to call it a corner
-const CORNER_SMOOTH_WINDOW       = 3;  // points to smooth bearing over
+const JUNCTION_BEARING_THRESHOLD = 60;  // strong straight presumption — only sharp deviations are junctions
+const CORNER_MIN_BEARING_TOTAL   = 30;  // strong straight presumption — needs 30° total change to call a corner
+const CORNER_SMOOTH_WINDOW       = 5;   // wider smoothing — filters out GPS micro-jitter
 
 async function runLookahead(lat, lng, heading, speedMph) {
     // Skip if too slow, or nav is active (route provides corner data)
@@ -3563,12 +3837,16 @@ async function runLookahead(lat, lng, heading, speedMph) {
         // Draw lookahead line on map
         if (map) drawLookaheadLine(routeCoords, curve);
 
-        // Feed into cornering coach if no active route
-        if (!navActive && curve) {
-            const speedVal = parseInt(document.getElementById('demoSpeed').value);
-            const leanDeg  = imuActive ? Math.abs(currentLeanDeg) : Math.min(Math.round(speedVal * 0.38), 58);
-            const result   = corneringCoach({ speed_mph: speedVal }, { leanDeg }, curve, userSkill);
-            applyResult(result, speedVal, leanDeg, curve);
+        // Feed into cornering coach regardless of nav mode
+        const speedVal = parseInt(document.getElementById('demoSpeed').value);
+        const leanDeg  = imuActive ? Math.abs(currentLeanDeg) : Math.min(Math.round(speedVal * 0.38), 58);
+        const result   = corneringCoach({ speed_mph: speedVal }, { leanDeg }, curve, userSkill);
+        applyResult(result, speedVal, leanDeg, curve);
+
+        // Submit corner to obstacle queue (only if detectRoadFeatures hasn't already found an OSM feature)
+        if (curve && (!activeObstacle || activeObstacle.source === 'lookahead')) {
+            submitObstacle({ type: 'corner', distanceMetres: curve.distanceMetres,
+                direction: curve.direction, speedLimit: null, curve, source: 'lookahead' });
         }
 
     } catch(e) {
@@ -3703,6 +3981,41 @@ function drawLookaheadLine(coords, curve) {
     }
 }
 
+function routeSimilarity(routeA, routeB) {
+    // Compare routes by sampling bearing at several points along each
+    // Returns 0 (completely different) to 1 (identical)
+    const coordsA = routeA?.geometry?.coordinates || [];
+    const coordsB = routeB?.geometry?.coordinates || [];
+    if (coordsA.length < 2 || coordsB.length < 2) return 0;
+
+    // Sample 5 evenly-spaced bearings along each route
+    const samples = 5;
+    const bearingsA = [], bearingsB = [];
+    for (let i = 0; i < samples; i++) {
+        const idxA = Math.floor((i / samples) * (coordsA.length - 1));
+        const idxB = Math.floor((i / samples) * (coordsB.length - 1));
+        if (idxA + 1 < coordsA.length) bearingsA.push(bearing(coordsA[idxA], coordsA[idxA + 1]));
+        if (idxB + 1 < coordsB.length) bearingsB.push(bearing(coordsB[idxB], coordsB[idxB + 1]));
+    }
+    if (bearingsA.length === 0 || bearingsB.length === 0) return 0;
+
+    // Also compare total distances — very different distances = different routes
+    const distDiff = Math.abs(routeA.distance - routeB.distance) / Math.max(routeA.distance, routeB.distance);
+    if (distDiff > 0.15) return 0; // >15% distance difference = genuinely different
+
+    // Average bearing difference across samples
+    let totalDiff = 0;
+    const len = Math.min(bearingsA.length, bearingsB.length);
+    for (let i = 0; i < len; i++) {
+        let diff = Math.abs(bearingsA[i] - bearingsB[i]);
+        if (diff > 180) diff = 360 - diff;
+        totalDiff += diff;
+    }
+    const avgDiff = totalDiff / len;
+    // avgDiff of 0 = identical, 180 = opposite — normalise to similarity 0-1
+    return Math.max(0, 1 - avgDiff / 45); // 45° average diff = 0 similarity
+}
+
 async function planRoute() {
     const btnRoute = document.getElementById('btnRoute');
     const errEl    = document.getElementById('routeError');
@@ -3775,26 +4088,64 @@ async function planRoute() {
         }
 
         const fastestRoute = fastestData.routes[0];
-        const fastestMins  = Math.round(fastestRoute.duration / 60);
-        const maxBudgetMins = fastestMins * 1.10; // 10% time budget for alt routes
+        // ── FASTEST: strictly the shortest duration route ──
+        // Sort all returned routes by duration, take the shortest
+        const allFastestCandidates = [...(fastestData.routes || [])];
+        allFastestCandidates.sort((a, b) => a.duration - b.duration);
+        const fastestRoute_confirmed = allFastestCandidates[0] || fastestRoute;
+        // Use confirmed fastest (may differ if API returned alternatives)
+        const fastestMins   = Math.round(fastestRoute_confirmed.duration / 60);
+        const maxBudgetMins = Math.round(fastestMins * 1.15); // 15% budget for alternatives
 
-        // ── LEAST TRAFFIC ROUTE ──
-        // Pick whichever alternative has lowest congestion score
-        // If none better than fastest within budget, fall back to fastest data
-        let leastTrafficRoute = fastestRoute;
-        if (leastTrafficData.routes && leastTrafficData.routes.length > 1) {
-            const candidates = leastTrafficData.routes.filter(r =>
-                Math.round(r.duration / 60) <= maxBudgetMins
-            );
-            // Score each candidate by congestion — lower is better
-            const scored = candidates.map(r => {
-                const summary = getTrafficSummary(r);
-                const order   = { ok: 0, warn: 1, crit: 2 };
-                return { route: r, score: order[summary.cls] || 0, mins: Math.round(r.duration / 60) };
-            });
-            scored.sort((a, b) => a.score - b.score || a.mins - b.mins);
-            leastTrafficRoute = scored[0].route;
+        // ── LEAST TRAFFIC: best congestion score, must be genuinely different ──
+        // Pool all candidates from both fetches, exclude any that match fastest geometry
+        const allTrafficCandidates = [
+            ...(fastestData.routes || []),
+            ...(leastTrafficData.routes || []),
+        ].filter(r => {
+            const mins = Math.round(r.duration / 60);
+            return mins <= maxBudgetMins;
+        });
+
+        // Score by congestion quality
+        const trafficOrder = { ok: 0, warn: 1, crit: 2 };
+        const scoredTraffic = allTrafficCandidates.map(r => {
+            const summary  = getTrafficSummary(r);
+            const congScore = trafficOrder[summary.cls] || 0;
+            const mins      = Math.round(r.duration / 60);
+            // Geometric similarity check — compare start/end bearing of route
+            const isSameAsfast = routeSimilarity(r, fastestRoute_confirmed) > 0.85;
+            return { route: r, congScore, mins, isSameAsFastest: isSameAsfast };
+        });
+
+        // Sort: prefer low congestion, then among equal congestion prefer shorter time
+        scoredTraffic.sort((a, b) => a.congScore - b.congScore || a.mins - b.mins);
+
+        // Pick best that is DIFFERENT from fastest
+        // If all alternatives are similar to fastest, use the one with best congestion anyway
+        let leastTrafficRoute = fastestRoute_confirmed;
+        const differentRoutes = scoredTraffic.filter(s => !s.isSameAsFastest);
+        if (differentRoutes.length > 0) {
+            leastTrafficRoute = differentRoutes[0].route;
+        } else if (scoredTraffic.length > 0) {
+            // All similar — pick best congestion regardless
+            leastTrafficRoute = scoredTraffic[0].route;
         }
+
+        // Final guarantee: least traffic must NEVER be faster than fastest
+        // If it is, swap labels (the "least traffic" is actually faster — call it fastest)
+        const leastTrafficMins = Math.round(leastTrafficRoute.duration / 60);
+        let finalFastest = fastestRoute_confirmed;
+        let finalLeastTraffic = leastTrafficRoute;
+        if (leastTrafficMins < fastestMins) {
+            // Least traffic route is faster — it becomes the fastest
+            finalFastest      = leastTrafficRoute;
+            finalLeastTraffic = fastestRoute_confirmed;
+        }
+        // Override for use below
+        const fastestRouteFinal      = finalFastest;
+        const leastTrafficRouteFinal = finalLeastTraffic;
+        const fastestMinsFinal       = Math.round(fastestRouteFinal.duration / 60);
 
         // ── SCENIC ROUTE ──
         // Score all candidates (scenic fetch + any alternatives within budget)
@@ -3806,7 +4157,7 @@ async function planRoute() {
             scenicCandidates.push(...leastTrafficData.routes.slice(1).filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
         }
 
-        let scenicRoute  = scenicCandidates[0] || fastestRoute;
+        let scenicRoute  = scenicCandidates[0] || fastestRouteFinal;
         let scenicBadge  = scenicCandidates.length > 0 ? 'A & B roads' : null;
         let scenicWarnings = [];
         let scenicScoreResult = null;
@@ -3825,16 +4176,24 @@ async function planRoute() {
                         steps.forEach(s => (s.intersections || []).forEach(ix => {
                             if (ix.classes && (ix.classes.includes('traffic_signal') || ix.classes.includes('stop_sign'))) junctions++;
                         }));
-                        const corners    = estimateCorners(r.geometry.coordinates);
-                        const w          = scenicSettings.weights;
-                        const greenScore = await scoreGreenSpace(r.geometry.coordinates);
-                        const total =
+                        const corners     = estimateCorners(r.geometry.coordinates);
+                        const w           = scenicSettings.weights;
+                        // scoreGreenSpace now returns an object — no race condition
+                        const greenResult = await scoreGreenSpace(r.geometry.coordinates);
+                        const urbanScore  = 1 - greenResult.urbanPenalty;
+                        // Urban penalty applied both via green score and as direct factor
+                        // weighted by the urban slider (0-10)
+                        const urbanWeight = (w.urban || 8) / 10;
+                        const urbanFactor = 1 - (greenResult.urbanPenalty * urbanWeight * 0.8);
+                        const baseTotal =
                             elevFull.score                           * w.elevation +
                             (trafficOrder[trafficS.cls] || 0.5)     * w.traffic   +
                             Math.max(0, 1 - junctions / 50)         * w.flow      +
                             Math.min(corners / 30, 1)               * w.corners   +
-                            greenScore                               * w.green;
-                        return { route: r, score: total, elevFull, junctions, corners, greenScore, trafficS };
+                            greenResult.score                        * w.green;
+                        // Apply urban factor as a multiplier on the whole score
+                        const total = baseTotal * Math.max(urbanFactor, 0.1);
+                        return { route: r, score: total, elevFull, junctions, corners, greenResult, trafficS };
                     })
                 );
                 scoreResults.sort((a, b) => b.score - a.score);
@@ -3847,7 +4206,21 @@ async function planRoute() {
                 if (best.elevFull.hardLimitBreached) {
                     scenicWarnings.push(`Contains sections above ${scenicSettings.gradHardLimit}% — ride with care`);
                 }
-                scenicBadge = scenicWarnings.length > 0 ? '⚠ Gradient warning' : 'Scenic scored';
+                // Urban badge derived from this specific route's result — no global state
+                const urbanPenalty = best.greenResult?.urbanPenalty || 0;
+                const classification = best.greenResult?.classification || 'Unknown';
+                if (scenicWarnings.length > 0 && urbanPenalty > 0.6) {
+                    scenicBadge = '⚠ Urban + gradient';
+                } else if (scenicWarnings.length > 0) {
+                    scenicBadge = '⚠ Gradient warning';
+                } else if (urbanPenalty > 0.6) {
+                    scenicBadge = '⚠ Urban route';
+                    scenicWarnings.push(`Route is ${classification} — scenic score reduced`);
+                } else if (urbanPenalty > 0.3) {
+                    scenicBadge = `Semi-rural`;
+                } else {
+                    scenicBadge = `Scenic · ${classification}`;
+                }
             } catch(scoringErr) {
                 console.warn('Scenic scoring failed, using first candidate:', scoringErr.message);
                 // scenicRoute already set to first candidate above
@@ -3855,18 +4228,18 @@ async function planRoute() {
         }
 
         // ── allRoutes fixed to 3 slots: [fastest, leastTraffic, scenic] ──
-        allRoutes = [fastestRoute, leastTrafficRoute, scenicRoute];
+        allRoutes = [fastestRouteFinal, leastTrafficRouteFinal, scenicRoute];
         activeRouteIdx = 0;
 
         // ── BUILD CARDS ──
         const routeCardDefs = [
             {
-                route: fastestRoute, idx: 0,
+                route: fastestRouteFinal, idx: 0,
                 icon: 'fastest', iconClass: 'ti-bolt', label: 'Fastest', badge: null,
                 mins: fastestMins,
             },
             {
-                route: leastTrafficRoute, idx: 1,
+                route: leastTrafficRouteFinal, idx: 1,
                 icon: 'least-traffic', iconClass: 'ti-traffic-cone', label: 'Least traffic',
                 badge: leastTrafficRoute !== fastestRoute ? getTrafficSummary(leastTrafficRoute).label : null,
                 mins: Math.round(leastTrafficRoute.duration / 60),
@@ -3890,7 +4263,7 @@ async function planRoute() {
             const timeStr   = def.mins >= 60 ? `${Math.floor(def.mins/60)}h ${def.mins%60}m` : `${def.mins} min`;
             const distMi    = (def.route.distance / 1609.34).toFixed(1);
             const corners   = estimateCorners(def.route.geometry.coordinates);
-            const extraMins = def.mins - fastestMins;
+            const extraMins = def.mins - fastestMinsFinal;
             const timeDiff  = extraMins > 0 ? ` · +${extraMins} min` : '';
             const badgeColor = def.badge && def.badge.includes('⚠') ? 'rgba(234,179,8,0.15);color:var(--warn)' : 'rgba(59,130,246,0.12);color:var(--accent)';
             const badgeHtml = def.badge
@@ -4170,19 +4543,17 @@ function showMapRoutePicker() {
         const isActive = def.idx === activeRouteIdx;
 
         const card = document.createElement('div');
+        card.setAttribute('data-route-idx', def.idx);
         card.style.cssText = `display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;border:1px solid ${isActive ? def.color : 'var(--border)'};background:${isActive ? 'rgba(255,255,255,0.05)' : 'var(--surface)'};transition:all 0.15s;`;
         card.innerHTML = `
             <div style="width:10px;height:10px;border-radius:50%;background:${def.color};flex-shrink:0;box-shadow:0 0 6px ${def.color}66;"></div>
             <i class="ti ${def.icon}" style="color:${def.color};font-size:14px;flex-shrink:0;"></i>
             <div style="flex:1;">
-                <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:${isActive ? def.color : 'var(--text)'};">${def.label}</div>
+                <div class="picker-label" style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:${isActive ? def.color : 'var(--text)'};">${def.label}</div>
                 <div style="font-size:11px;color:var(--muted);">${timeStr} · ${distMi} mi · ${corners} corners</div>
             </div>
-            ${isActive ? `<i class="ti ti-check" style="color:${def.color};font-size:16px;"></i>` : ''}`;
-        card.onclick = () => {
-            selectAltRoute(def.idx);
-            showMapRoutePicker(); // refresh to update active state
-        };
+            <i class="picker-check ti ti-check" style="color:${def.color};font-size:16px;${isActive ? '' : 'visibility:hidden;'}"></i>`;
+        card.onclick = () => selectAltRoute(def.idx);
         cards.appendChild(card);
     });
 
@@ -4192,6 +4563,22 @@ function showMapRoutePicker() {
 function hideMapRoutePicker() {
     const picker = document.getElementById('routePicker');
     if (picker) picker.style.display = 'none';
+}
+
+function updatePickerHighlight(activeIdx) {
+    const cards = document.querySelectorAll('#routePickerCards [data-route-idx]');
+    const colors = ['#ef4444', '#2dd4bf', '#22c55e'];
+    cards.forEach(card => {
+        const idx      = parseInt(card.getAttribute('data-route-idx'));
+        const color    = colors[idx] || 'var(--accent)';
+        const isActive = idx === activeIdx;
+        card.style.borderColor  = isActive ? color : 'var(--border)';
+        card.style.background   = isActive ? 'rgba(255,255,255,0.05)' : 'var(--surface)';
+        const label = card.querySelector('.picker-label');
+        const check = card.querySelector('.picker-check');
+        if (label) label.style.color = isActive ? color : 'var(--text)';
+        if (check) check.style.visibility = isActive ? 'visible' : 'hidden';
+    });
 }
 
 function startNavigationFromModal() {
