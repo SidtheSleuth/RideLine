@@ -246,7 +246,11 @@
                 <i class="ti ti-device-mobile-vibration"></i>
             </button>
             <button class="icon-btn" id="lightBtn" title="Enable tunnel detection" onclick="setupLightSensor()" style="border-color:rgba(234,179,8,0.3);color:#eab308;">
-                <i class="ti ti-archway"></i>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="tunnelIcon">
+                    <path d="M3 21V12a9 9 0 0 1 18 0v9"/>
+                    <path d="M3 21h18"/>
+                    <path d="M9 21v-6a3 3 0 0 1 6 0v6"/>
+                </svg>
             </button>
             <button class="icon-btn" title="Map token" onclick="openKeyModal()">
                 <i class="ti ti-map-pin"></i>
@@ -2189,11 +2193,17 @@ function selectAltRoute(idx) {
     document.getElementById('rbTime').textContent    = timeStr;
     document.getElementById('rbCorners').textContent = corners;
 
-    // Flash banner border colour to confirm selection
-    showMapRouteLabel(idx);
-    closeRouteModal();
     // Update picker card highlight directly — faster than full rebuild
     updatePickerHighlight(idx);
+    // Flash banner border colour to confirm selection
+    const banner = document.getElementById('routeBanner');
+    if (banner) {
+        const flashColors = ['#ef4444','#2dd4bf','#22c55e','#a78bfa'];
+        const prevBorder  = banner.style.borderColor;
+        banner.style.borderColor = flashColors[idx] || 'var(--accent)';
+        setTimeout(() => { banner.style.borderColor = prevBorder; }, 1500);
+    }
+    closeRouteModal();
 }
 let avoidTolls     = false;
 let preferTwisty   = false;
@@ -2680,13 +2690,9 @@ function startNavigation() {
     // Close any open modals
     closeRouteModal();
 
-    // Update style button state
-    document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
-    const otsBtn = document.getElementById('styleBtn-ots');
-    if (otsBtn) otsBtn.classList.add('active');
+    // Note: don't change style button highlight — we're preserving the rider's chosen style
+    // OTS is a camera mode, not a style mode
 
-    // Enter OTS mode — if map style is already dark, just apply camera directly
-    // Otherwise swap to dark style first then apply camera
     if (!map) return;
 
     // Preserve current style — OTS is camera-only, no style change
@@ -2723,10 +2729,15 @@ function endNavigation() {
     mapUserPanned = false;
     document.getElementById('recentreBtn').style.display = 'none';
 
-    // Update style button state
+    // Restore correct style button highlight based on current style
     document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
-    const darkBtn = document.getElementById('styleBtn-dark');
-    if (darkBtn) darkBtn.classList.add('active');
+    const activeBtn = document.getElementById('styleBtn-' + currentMapStyle);
+    if (activeBtn) activeBtn.classList.add('active');
+    // Also mark auto button if auto theme is on
+    if (autoThemeEnabled && !manualThemeOverride) {
+        const autoBtn = document.getElementById('styleBtn-auto');
+        if (autoBtn) autoBtn.classList.add('active');
+    }
 
     // Smooth return to birds-eye view
     if (map) {
@@ -2853,7 +2864,9 @@ function markLightSensorActive() {
         btn.style.background  = 'rgba(234,179,8,0.15)';
         btn.style.borderColor = '#eab308';
         btn.title = 'Tunnel detection active';
-        btn.querySelector('i').className = 'ti ti-archway';
+        // Change tunnel SVG to filled state when active
+        const svg = btn.querySelector('svg');
+        if (svg) svg.setAttribute('fill', 'rgba(234,179,8,0.2)');
     }
 }
 
