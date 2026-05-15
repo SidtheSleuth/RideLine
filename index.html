@@ -246,7 +246,7 @@
                 <i class="ti ti-device-mobile-vibration"></i>
             </button>
             <button class="icon-btn" id="lightBtn" title="Enable tunnel detection" onclick="setupLightSensor()" style="border-color:rgba(234,179,8,0.3);color:#eab308;">
-                <i class="ti ti-tunnel"></i>
+                <i class="ti ti-archway"></i>
             </button>
             <button class="icon-btn" title="Map token" onclick="openKeyModal()">
                 <i class="ti ti-map-pin"></i>
@@ -370,8 +370,9 @@
 
         <!-- Recentre button — shown when map is panned away from rider position -->
         <div id="recentreBtn" style="display:none;position:absolute;bottom:140px;right:12px;z-index:15;">
-            <button onclick="recentreMap()" style="width:42px;height:42px;border-radius:50%;background:rgba(10,12,15,0.92);border:1px solid var(--border);color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(0,0,0,0.4);">
-                <i class="ti ti-current-location"></i>
+            <button onclick="recentreMap()" style="height:38px;padding:0 14px;border-radius:19px;background:rgba(10,12,15,0.92);border:1px solid var(--accent);color:var(--accent);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:flex;align-items:center;gap:7px;cursor:pointer;backdrop-filter:blur(4px);box-shadow:0 2px 10px rgba(59,130,246,0.3);">
+                <i class="ti ti-current-location" style="font-size:14px;"></i>
+                Re-centre
             </button>
         </div>
 
@@ -386,9 +387,13 @@
                 <div style="width:20px;height:4px;background:#2dd4bf;border-radius:2px;"></div>
                 <span style="color:var(--muted);">Least traffic</span>
             </div>
-            <div onclick="selectAltRoute(2)" style="display:flex;align-items:center;gap:6px;cursor:pointer;" id="rk-2">
+            <div onclick="selectAltRoute(2)" style="display:flex;align-items:center;gap:6px;margin-bottom:5px;cursor:pointer;" id="rk-2">
                 <div style="width:20px;height:4px;background:#22c55e;border-radius:2px;"></div>
                 <span style="color:var(--muted);">Most scenic</span>
+            </div>
+            <div onclick="selectAltRoute(3)" style="display:flex;align-items:center;gap:6px;cursor:pointer;" id="rk-3" data-scenic-b="1">
+                <div style="width:20px;height:4px;background:#a78bfa;border-radius:2px;"></div>
+                <span style="color:var(--muted);">Alt. scenic</span>
             </div>
         </div>
 
@@ -641,8 +646,8 @@
                     <span style="font-size:13px;color:var(--text);">Low traffic</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="range" id="wTraffic" min="0" max="10" step="1" value="7" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--warn);">
-                    <span class="scenic-val" id="wTrafficVal">7</span>
+                    <input type="range" id="wTraffic" min="0" max="20" step="1" value="14" oninput="updateScenicSettings()" style="width:80px;accent-color:var(--warn);">
+                    <span class="scenic-val" id="wTrafficVal">14</span>
                 </div>
             </div>
 
@@ -1752,9 +1757,10 @@ async function initMap(providedKey) {
             // Ensure all route layers are set up (works regardless of initial style)
             // Route config: inactive routes drawn dimly, active route drawn boldly
             const routeConfigs = [
-                { id: 'route-0', color: '#ef4444', label: 'fastest'      },  // red    — fastest
-                { id: 'route-1', color: '#2dd4bf', label: 'least-traffic' }, // teal   — least traffic
-                { id: 'route-2', color: '#22c55e', label: 'scenic'       },  // green  — scenic
+                { id: 'route-0', color: '#ef4444', label: 'fastest'        }, // red    — fastest
+                { id: 'route-1', color: '#2dd4bf', label: 'least-traffic'  }, // teal   — least traffic
+                { id: 'route-2', color: '#22c55e', label: 'scenic-a'       }, // green  — scenic A
+                { id: 'route-3', color: '#a78bfa', label: 'scenic-b'       }, // purple — scenic B
             ];
 
             routeConfigs.forEach(cfg => {
@@ -2065,7 +2071,7 @@ let waypointCount   = 0;
 let allRoutes       = []; // store fetched alternative routes
 let activeRouteIdx  = 0;  // which route is selected
 let waypointMarkers = []; // mapbox markers for waypoints
-const ROUTE_SOURCE_IDS = ['route-0', 'route-1', 'route-2']; // fixed source IDs for 3 routes
+const ROUTE_SOURCE_IDS = ['route-0', 'route-1', 'route-2', 'route-3']; // 4 routes: fastest, least traffic, scenic A, scenic B
 
 function addWaypoint() {
     waypointCount++;
@@ -2167,7 +2173,7 @@ function selectAltRoute(idx) {
     if (map && map.getSource('traffic')) map.getSource('traffic').setData(congestionSegments);
 
     // Update route key highlight
-    ['rk-0','rk-1','rk-2'].forEach((id, i) => {
+    ['rk-0','rk-1','rk-2','rk-3'].forEach((id, i) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.querySelector('span').style.color  = i === idx ? 'var(--text)' : 'var(--muted)';
@@ -2200,10 +2206,10 @@ let scenicSettings = {
     weights: {
         green:     8,  // green space score weight
         elevation: 7,  // elevation variety weight
-        traffic:   7,  // low traffic weight
+        traffic:  14,  // doubled — heavily weight low-traffic routes for scenic
         flow:      6,  // flow quality (fewer junctions) weight
         corners:   5,  // twistiness weight
-        urban:     8,  // urban penalty weight (higher = stronger penalty for urban routes)
+        urban:     8,  // urban penalty weight
     }
 };
 
@@ -2340,32 +2346,81 @@ async function fetchHEREIncidents(start, end) {
     } catch(e) { return 'Unavailable'; }
 }
 
-async function fetchGoogleRoute(start, end) {
-    const url = `https://routes.googleapis.com/directions/v2:computeRoutes`;
+async function fetchGoogleRoute(start, end, includeAlternatives = false) {
+    const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+    // Avoidance from CBT / toggles
+    const routeModifiers = {};
+    if (avoidMotorways) routeModifiers.avoidHighways = true;
+    if (avoidTolls)     routeModifiers.avoidTolls    = true;
+
     try {
         const res = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': GOOGLE_API_KEY,
-                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.travelAdvisory',
+                'X-Goog-FieldMask': includeAlternatives
+                    ? 'routes.duration,routes.distanceMeters,routes.polyline,routes.travelAdvisory,routes.legs.steps'
+                    : 'routes.duration,routes.distanceMeters,routes.polyline,routes.travelAdvisory',
             },
             body: JSON.stringify({
                 origin:      { location: { latLng: { latitude: start[1], longitude: start[0] } } },
                 destination: { location: { latLng: { latitude: end[1],   longitude: end[0]   } } },
                 travelMode:  'DRIVE',
                 routingPreference: 'TRAFFIC_AWARE',
+                computeAlternativeRoutes: includeAlternatives,
+                routeModifiers,
+                polylineQuality: 'HIGH_QUALITY',
                 departureTime: new Date().toISOString(),
             })
         });
         const data = await res.json();
         if (!data.routes || data.routes.length === 0) return null;
-        const route   = data.routes[0];
-        const secs    = parseInt(route.duration);
-        const mins    = Math.round(secs / 60);
+
+        // Convert Google routes to Mapbox-like format for unified scoring
+        const converted = data.routes.map(r => {
+            const secs    = parseInt(r.duration);
+            const mins    = Math.round(secs / 60);
+            const coords  = decodeGooglePolyline(r.polyline?.encodedPolyline || '');
+            return {
+                duration:   secs,
+                distance:   r.distanceMeters,
+                geometry:   { type: 'LineString', coordinates: coords },
+                legs:       r.legs || [],
+                _source:    'google',
+                _mins:      mins,
+            };
+        });
+
+        // Top-level return (legacy compatibility)
+        const route   = converted[0];
+        const mins    = route._mins;
         const timeStr = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
-        return { timeStr };
-    } catch(e) { return null; }
+
+        return { timeStr, routes: converted };
+    } catch(e) {
+        console.warn('Google routes failed:', e.message);
+        return null;
+    }
+}
+
+// Decode Google's encoded polyline format to [lng, lat] array
+function decodeGooglePolyline(encoded) {
+    if (!encoded) return [];
+    const coords = [];
+    let index = 0, lat = 0, lng = 0;
+    while (index < encoded.length) {
+        let b, shift = 0, result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lat += dlat;
+        shift = 0; result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lng += dlng;
+        coords.push([lng / 1e5, lat / 1e5]);
+    }
+    return coords;
 }
 
 /* ═══════════════════════════════════════════════
@@ -2634,43 +2689,17 @@ function startNavigation() {
     // Otherwise swap to dark style first then apply camera
     if (!map) return;
 
-    const applyNav = () => {
-        // Activate OTS camera immediately
-        map.easeTo({
-            pitch:    65,
-            zoom:     17,
-            bearing:  compassDeg,
-            duration: 800,
-        });
-        // If we have GPS position, centre on rider
-        if (lastPos) {
-            map.easeTo({
-                center:   [lastPos.lng, lastPos.lat],
-                pitch:    65,
-                zoom:     17,
-                bearing:  compassDeg,
-                duration: 800,
-            });
-        }
-        // Re-add route layers in case style just changed
-        reAddRouteLayers();
-    };
-
-    // Check if current style is already dark — avoid unnecessary reload
-    const currentStyle = map.getStyle();
-    const isDark = currentStyle?.name?.toLowerCase().includes('dark') || currentMapStyle === 'dark' || currentMapStyle === 'ots';
-
-    if (isDark) {
-        applyNav();
-    } else {
-        // Switch to dark first then apply OTS camera
-        map.setStyle(MAP_STYLES.dark);
-        map.once('style.load', () => {
-            reAddRouteLayers();
-            applyNav();
-        });
-    }
-    currentMapStyle = 'ots';
+    // Preserve current style — OTS is camera-only, no style change
+    // The user's selected theme (or auto theme) stays as-is
+    const targetCentre = lastPos ? [lastPos.lng, lastPos.lat] : map.getCenter().toArray();
+    map.easeTo({
+        center:   targetCentre,
+        pitch:    65,
+        zoom:     17,
+        bearing:  compassDeg,
+        duration: 800,
+    });
+    // Note: currentMapStyle is NOT changed — we keep dark/bright/satellite as the rider chose
 }
 
 function endNavigation() {
@@ -2679,12 +2708,15 @@ function endNavigation() {
     // Clear obstacle queue on nav end
     obstacleQueue  = [];
     clearActiveObstacle();
-    currentMapStyle = 'dark';
+    // Don't force a style change — preserve whatever the user/auto-theme has set
 
     // Show banner start button again, hide end nav bar
     document.getElementById('btnStartNav').style.display = '';
     document.getElementById('endNavBar').style.display   = 'none';
-    document.getElementById('routeBanner').classList.remove('nav-mode');
+    // Fully hide the route banner — was leaving the white panel stuck on screen
+    const banner = document.getElementById('routeBanner');
+    banner.classList.remove('nav-mode');
+    banner.classList.remove('visible');
 
     // Restore style bar and hide recentre
     document.getElementById('mapStyleBar').style.display = '';
@@ -2704,13 +2736,7 @@ function endNavigation() {
             zoom:     13,
             duration: 1000,
         });
-        // Return to auto theme style (day/night appropriate)
-        setTimeout(() => {
-            if (!manualThemeOverride) {
-                const returnStyle = isDaytime() ? 'bright' : 'dark';
-                setMapStyle(returnStyle, true);
-            }
-        }, 1200);
+        // Auto theme will resume on its own — no manual style force here
     }
 
     // Show pollen + AQI banner after 4 seconds
@@ -2827,7 +2853,7 @@ function markLightSensorActive() {
         btn.style.background  = 'rgba(234,179,8,0.15)';
         btn.style.borderColor = '#eab308';
         btn.title = 'Tunnel detection active';
-        btn.querySelector('i').className = 'ti ti-tunnel';
+        btn.querySelector('i').className = 'ti ti-archway';
     }
 }
 
@@ -4135,7 +4161,7 @@ async function planRoute() {
     // Route 2 — Scenic: driving profile, excludes motorways, favours A/B roads
     const scenicExclusions = [...new Set([...exclusions, 'motorway'])];
     const scenicExcludeParam = `&exclude=${scenicExclusions.join(',')}`;
-    const scenicUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}?geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance${scenicExcludeParam}&access_token=${token}`;
+    const scenicUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}?geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance&alternatives=true${scenicExcludeParam}&access_token=${token}`;
 
     try {
     const [fastestRes, leastTrafficRes, scenicRes] = await Promise.all([
@@ -4214,18 +4240,38 @@ async function planRoute() {
 
         // ── SCENIC ROUTE ──
         // Score all candidates (scenic fetch + any alternatives within budget)
+        // Collect all candidates from Mapbox AND Google for widest variety
         const scenicCandidates = [];
         if (scenicData.routes && scenicData.routes.length > 0) {
             scenicCandidates.push(...scenicData.routes.filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
         }
-        if (leastTrafficData.routes && leastTrafficData.routes.length > 1) {
-            scenicCandidates.push(...leastTrafficData.routes.slice(1).filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
+        if (leastTrafficData.routes && leastTrafficData.routes.length > 0) {
+            scenicCandidates.push(...leastTrafficData.routes.filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
         }
+        // Add Google alternatives — different routing engine = different road choices
+        try {
+            const googleData = await googleRoutePromise;
+            if (googleData?.routes?.length > 0) {
+                scenicCandidates.push(...googleData.routes.filter(r => Math.round(r.duration / 60) <= maxBudgetMins));
+            }
+        } catch(e) { /* Google failed — proceed with Mapbox only */ }
+        // Deduplicate by geometric similarity to avoid scoring near-identical routes
+        const dedupedCandidates = [];
+        scenicCandidates.forEach(r => {
+            const isDuplicate = dedupedCandidates.some(existing => routeSimilarity(r, existing) > 0.85);
+            if (!isDuplicate) dedupedCandidates.push(r);
+        });
+        scenicCandidates.length = 0;
+        scenicCandidates.push(...dedupedCandidates);
 
-        let scenicRoute  = scenicCandidates[0] || fastestRouteFinal;
-        let scenicBadge  = scenicCandidates.length > 0 ? 'A & B roads' : null;
-        let scenicWarnings = [];
-        let scenicScoreResult = null;
+        let scenicRoute       = scenicCandidates[0] || fastestRouteFinal;
+        let scenicRouteB      = null; // optional second scenic route, distinct from primary
+        let scenicBadge       = scenicCandidates.length > 0 ? 'A & B roads' : null;
+        let scenicBadgeB      = null;
+        let scenicWarnings    = [];
+        let scenicWarningsB   = [];
+        let scenicScoreResult  = null;
+        let scenicScoreResultB = null;
 
         // Scenic scoring is optional — if it fails, use the first scenic candidate
         if (scenicCandidates.length > 0) {
@@ -4234,7 +4280,10 @@ async function planRoute() {
                 const scoreResults = await Promise.all(
                     scenicCandidates.map(async r => {
                         const elevFull = await scoreElevationFull(r.geometry.coordinates, []);
-                        const trafficS = getTrafficSummary(r);
+                        // Google routes lack congestion data — neutral score (0.7)
+                        const trafficS = r._source === 'google'
+                            ? { cls: 'ok',  label: 'Google route' }
+                            : getTrafficSummary(r);
                         const trafficOrder = { ok: 1, warn: 0.5, crit: 0 };
                         const steps    = r.legs ? r.legs.flatMap(l => l.steps || []) : [];
                         let junctions  = 0;
@@ -4261,10 +4310,50 @@ async function planRoute() {
                         return { route: r, score: total, elevFull, junctions, corners, greenResult, trafficS };
                     })
                 );
+                // Two-pass selection — prefer rural routes when urban routes dominate
                 scoreResults.sort((a, b) => b.score - a.score);
-                const best        = scoreResults[0];
+
+                // If top route is heavily urban, look for a rural alternative within 15% of top score
+                const topScore        = scoreResults[0].score;
+                const topUrbanPenalty = scoreResults[0].greenResult?.urbanPenalty || 0;
+                let bestIdx = 0;
+
+                if (topUrbanPenalty > 0.5 && scoreResults.length > 1) {
+                    // Find any candidate with significantly less urban penalty
+                    // even if it scores up to 25% lower overall
+                    const ruralAlternative = scoreResults.find((s, i) => {
+                        if (i === 0) return false;
+                        const altUrban = s.greenResult?.urbanPenalty || 0;
+                        const urbanImprovement = topUrbanPenalty - altUrban;
+                        const scoreDrop        = (topScore - s.score) / topScore;
+                        // Accept alternative if urban penalty drops by 0.25+ AND score drop is <25%
+                        return urbanImprovement >= 0.25 && scoreDrop < 0.25;
+                    });
+                    if (ruralAlternative) {
+                        bestIdx = scoreResults.indexOf(ruralAlternative);
+                    }
+                }
+
+                const best        = scoreResults[bestIdx];
                 scenicRoute       = best.route;
                 scenicScoreResult = best;
+
+                // ── SECOND SCENIC ROUTE — directionally distinct from primary ──
+                // Find another candidate that:
+                //   1. Is geometrically different from the primary scenic AND from fastest
+                //   2. Has the best score among different candidates
+                //   3. Falls within the time budget
+                scenicRouteB     = null;
+                scenicScoreResultB = null;
+                const usedRoutes = [fastestRouteFinal, leastTrafficRouteFinal, best.route];
+                const distinctCandidates = scoreResults.filter(s => {
+                    return !usedRoutes.some(used => routeSimilarity(s.route, used) > 0.65);
+                });
+                if (distinctCandidates.length > 0) {
+                    scenicRouteB       = distinctCandidates[0].route;
+                    scenicScoreResultB = distinctCandidates[0];
+                }
+
                 scenicWarnings    = best.elevFull.steepMins > scenicSettings.gradTolerance
                     ? [`${Math.round(best.elevFull.steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`]
                     : [];
@@ -4286,14 +4375,33 @@ async function planRoute() {
                 } else {
                     scenicBadge = `Scenic · ${classification}`;
                 }
+
+                // Compute badge for scenic B
+                if (scenicScoreResultB) {
+                    const upB = scenicScoreResultB.greenResult?.urbanPenalty || 0;
+                    const clsB = scenicScoreResultB.greenResult?.classification || 'Unknown';
+                    if (scenicScoreResultB.elevFull.steepMins > scenicSettings.gradTolerance) {
+                        scenicWarningsB.push(`${Math.round(scenicScoreResultB.elevFull.steepMins)} min over ${scenicSettings.gradSoftLimit}% gradient`);
+                    }
+                    if (scenicScoreResultB.elevFull.hardLimitBreached) {
+                        scenicWarningsB.push(`Contains sections above ${scenicSettings.gradHardLimit}% — ride with care`);
+                    }
+                    scenicBadgeB = scenicWarningsB.length > 0
+                        ? '⚠ Gradient warning'
+                        : upB > 0.6 ? '⚠ Urban route'
+                        : upB > 0.3 ? 'Semi-rural'
+                        : `Scenic · ${clsB}`;
+                }
             } catch(scoringErr) {
                 console.warn('Scenic scoring failed, using first candidate:', scoringErr.message);
                 // scenicRoute already set to first candidate above
             }
         }
 
-        // ── allRoutes fixed to 3 slots: [fastest, leastTraffic, scenic] ──
+        // ── allRoutes: [fastest, leastTraffic, scenicA, scenicB] ──
+        // scenicB may be null if no distinct alternative found — slot stays empty
         allRoutes = [fastestRouteFinal, leastTrafficRouteFinal, scenicRoute];
+        if (scenicRouteB) allRoutes.push(scenicRouteB);
         activeRouteIdx = 0;
 
         // ── BUILD CARDS ──
@@ -4318,6 +4426,17 @@ async function planRoute() {
                 mins: Math.round(scenicRoute.duration / 60),
             },
         ];
+        // Add second scenic card only if a distinct alternative was found
+        if (scenicRouteB) {
+            routeCardDefs.push({
+                route: scenicRouteB, idx: 3,
+                icon: 'scenic-alt', iconClass: 'ti-mountain-off', label: 'Alt. scenic',
+                badge: scenicBadgeB,
+                warnings: scenicWarningsB,
+                score: scenicScoreResultB ? Math.round((scenicScoreResultB.score / (Object.values(scenicSettings.weights).reduce((a,b)=>a+b,0))) * 100) : null,
+                mins: Math.round(scenicRouteB.duration / 60),
+            });
+        }
 
         const altList = document.getElementById('altRoutesList');
         altList.innerHTML = '';
@@ -4412,6 +4531,9 @@ async function planRoute() {
         document.getElementById('routeBtn').classList.add('active');
         document.getElementById('trafficLegend').style.display = 'block';
         document.getElementById('routeKey').style.display = 'block';
+        // Show or hide scenic B in route key based on whether it was found
+        const rk3 = document.getElementById('rk-3');
+        if (rk3) rk3.style.display = scenicRouteB ? 'flex' : 'none';
 
         // Close modal — routes are now on the map for the rider to tap
         closeRouteModal();
@@ -4433,7 +4555,9 @@ async function planRoute() {
                 document.getElementById('statHereIncidents').textContent = here.incidents;
             }
         });
-        fetchGoogleRoute(start, end).then(google => {
+        // Fetch Google with alternatives — these feed into the scenic candidate pool
+        const googleRoutePromise = fetchGoogleRoute(start, end, true);
+        googleRoutePromise.then(google => {
             if (google) {
                 document.getElementById('statGoogleTime').textContent = google.timeStr;
             }
@@ -4598,6 +4722,7 @@ function showMapRoutePicker() {
         { idx: 0, color: '#ef4444', icon: 'ti-bolt',         label: 'Fastest'       },
         { idx: 1, color: '#2dd4bf', icon: 'ti-traffic-cone', label: 'Least traffic' },
         { idx: 2, color: '#22c55e', icon: 'ti-mountain',     label: 'Most scenic'   },
+        { idx: 3, color: '#a78bfa', icon: 'ti-mountain-off', label: 'Alt. scenic'   },
     ];
 
     cards.innerHTML = '';
@@ -4635,7 +4760,7 @@ function hideMapRoutePicker() {
 
 function updatePickerHighlight(activeIdx) {
     const cards = document.querySelectorAll('#routePickerCards [data-route-idx]');
-    const colors = ['#ef4444', '#2dd4bf', '#22c55e'];
+    const colors = ['#ef4444', '#2dd4bf', '#22c55e', '#a78bfa'];
     cards.forEach(card => {
         const idx      = parseInt(card.getAttribute('data-route-idx'));
         const color    = colors[idx] || 'var(--accent)';
