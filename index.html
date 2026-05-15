@@ -81,6 +81,10 @@
         .route-banner.visible { display: flex; }
         .rb-stat { display: flex; flex-direction: column; }
         .rb-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .route-banner.nav-mode { padding: 6px 12px; }
+        .route-banner.nav-mode .rb-label { font-size: 9px; }
+        .route-banner.nav-mode .rb-val { font-size: 20px; }
+        .route-banner.nav-mode .rb-stat { gap: 1px; }
         .rb-val { font-family: var(--font-d); font-size: 16px; font-weight: 700; color: var(--text); }
         .rb-val.accent { color: var(--accent); }
         .rb-divider { width: 1px; height: 30px; background: var(--border); }
@@ -239,10 +243,10 @@
                 <i class="ti ti-route"></i>
             </button>
             <button class="icon-btn" id="imuBtn" title="Enable motion sensors" onclick="setupIMU()" style="border-color:rgba(45,212,191,0.3);color:#2dd4bf;">
-                <i class="ti ti-device-mobile-rotated"></i>
+                <i class="ti ti-device-mobile-vibration"></i>
             </button>
             <button class="icon-btn" id="lightBtn" title="Enable tunnel detection" onclick="setupLightSensor()" style="border-color:rgba(234,179,8,0.3);color:#eab308;">
-                <i class="ti ti-bulb"></i>
+                <i class="ti ti-tunnel"></i>
             </button>
             <button class="icon-btn" title="Map token" onclick="openKeyModal()">
                 <i class="ti ti-map-pin"></i>
@@ -281,8 +285,8 @@
             <span class="pos-label" id="posLabel">Centre line</span>
         </div>
 
-        <!-- Compass -->
-        <div class="hud-compass">
+        <!-- Compass — tap to orientate north -->
+        <div class="hud-compass" onclick="orientNorth()" style="cursor:pointer;" title="Tap to face north">
             <svg width="36" height="36" viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="17" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
                 <text x="18" y="8.5" text-anchor="middle" fill="#ef4444" font-size="7" font-weight="700" font-family="monospace">N</text>
@@ -361,6 +365,13 @@
             <button class="style-btn" id="styleBtn-auto" onclick="toggleAutoTheme()" title="Auto day/night theme">
                 <i class="ti ti-clock" id="autoThemeIcon"></i>
                 <span>Auto</span>
+            </button>
+        </div>
+
+        <!-- Recentre button — shown when map is panned away from rider position -->
+        <div id="recentreBtn" style="display:none;position:absolute;bottom:140px;right:12px;z-index:15;">
+            <button onclick="recentreMap()" style="width:42px;height:42px;border-radius:50%;background:rgba(10,12,15,0.92);border:1px solid var(--border);color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+                <i class="ti ti-current-location"></i>
             </button>
         </div>
 
@@ -1116,6 +1127,42 @@ function showLightNotice(msg) {
     }, 4000);
 }
 
+function orientNorth() {
+    if (!map) return;
+    // Reset bearing to north, exit OTS if active
+    mapUserPanned = false;
+    otsMode       = false;
+    document.getElementById('recentreBtn').style.display = 'none';
+    map.easeTo({
+        bearing:  0,
+        pitch:    otsMode ? 65 : 30,
+        duration: 500,
+    });
+}
+
+function recentreMap() {
+    if (!map || !lastPos) return;
+    mapUserPanned = false;
+    document.getElementById('recentreBtn').style.display = 'none';
+    if (otsMode || navActive) {
+        map.easeTo({
+            center:  [lastPos.lng, lastPos.lat],
+            bearing: compassDeg,
+            pitch:   65,
+            zoom:    17,
+            duration: 600,
+        });
+    } else {
+        map.easeTo({
+            center:  [lastPos.lng, lastPos.lat],
+            bearing: 0,
+            pitch:   30,
+            zoom:    14,
+            duration: 600,
+        });
+    }
+}
+
 function startAutoThemeTimer() {
     clearInterval(autoThemeTimer);
     // Check every 5 minutes
@@ -1193,6 +1240,7 @@ function applyOTSCamera() {
 
 let otsMode      = false;
 let navActive    = false;
+let mapUserPanned = false;  // true when user has manually panned away from rider
 let navRouteIdx  = 0;
 
 function reAddRouteLayers() {
@@ -1686,6 +1734,12 @@ async function initMap(providedKey) {
         }
 
         map.on('load', () => {
+            // Detect user-initiated panning — show recentre button
+            map.on('dragstart', () => {
+                mapUserPanned = true;
+                document.getElementById('recentreBtn').style.display = 'block';
+            });
+
             // Mark auto button active if auto is on (no style swap needed — correct style already loaded)
             const autoBtn = document.getElementById('styleBtn-auto');
             if (autoBtn && autoThemeEnabled) autoBtn.classList.add('active');
@@ -1828,16 +1882,20 @@ function onPosition(pos) {
     } else {
         userMarker.setLngLat([lng, lat]);
         if (otsMode || navActive) {
-            // OTS / active navigation: smooth Google Maps-style follow
-            // Use lower duration for snappy updates, higher zoom for street level
-            map.easeTo({
-                center:   [lng, lat],
-                bearing:  heading !== null ? heading : compassDeg,
-                pitch:    65,
-                zoom:     17,
-                duration: 500,
-                easing:   t => t,  // linear for smooth continuous motion
-            });
+            // OTS: only update camera if user hasn't manually panned
+            if (!mapUserPanned) {
+                // Use GPS heading (direction of travel) — more accurate than IMU compass
+                // Fall back to compassDeg only if GPS heading unavailable
+                const travelBearing = (heading !== null && heading !== undefined) ? heading : compassDeg;
+                map.easeTo({
+                    center:   [lng, lat],
+                    bearing:  travelBearing,
+                    pitch:    65,
+                    zoom:     17,
+                    duration: 500,
+                    easing:   t => t,  // linear for smooth continuous motion
+                });
+            }
         } else {
             map.easeTo({
                 center:  [lng, lat],
@@ -2560,6 +2618,10 @@ function startNavigation() {
     document.getElementById('mapStyleBar').style.display = 'none';
     hideMapRoutePicker();
 
+    // Show compact nav banner
+    const banner = document.getElementById('routeBanner');
+    banner.classList.add('visible', 'nav-mode');
+
     // Close any open modals
     closeRouteModal();
 
@@ -2622,9 +2684,12 @@ function endNavigation() {
     // Show banner start button again, hide end nav bar
     document.getElementById('btnStartNav').style.display = '';
     document.getElementById('endNavBar').style.display   = 'none';
+    document.getElementById('routeBanner').classList.remove('nav-mode');
 
-    // Restore style bar
+    // Restore style bar and hide recentre
     document.getElementById('mapStyleBar').style.display = '';
+    mapUserPanned = false;
+    document.getElementById('recentreBtn').style.display = 'none';
 
     // Update style button state
     document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
@@ -2762,7 +2827,7 @@ function markLightSensorActive() {
         btn.style.background  = 'rgba(234,179,8,0.15)';
         btn.style.borderColor = '#eab308';
         btn.title = 'Tunnel detection active';
-        btn.querySelector('i').className = 'ti ti-bulb-filled';
+        btn.querySelector('i').className = 'ti ti-tunnel';
     }
 }
 
@@ -4350,6 +4415,9 @@ async function planRoute() {
 
         // Close modal — routes are now on the map for the rider to tap
         closeRouteModal();
+
+        // Hide route banner during selection — shown again when nav starts
+        document.getElementById('routeBanner').classList.remove('visible');
 
         // Show floating route selector overlay on map
         showMapRoutePicker();
